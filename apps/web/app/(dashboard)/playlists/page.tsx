@@ -25,9 +25,9 @@ export default async function PlaylistsPage() {
   const playlists = (data as Playlist[]) ?? [];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight">Playlists</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Playlists</h1>
         <p className="mt-2 text-muted-foreground">Compose loops of media, then assign them to TVs on the Devices page.</p>
       </div>
 
@@ -46,7 +46,7 @@ export default async function PlaylistsPage() {
             <Card key={playlist.id} className="border-border bg-card">
               <CardHeader className="flex flex-row items-center justify-between space-y-0">
                 <div>
-                  <CardTitle className="text-xl">{playlist.name}</CardTitle>
+                  <CardTitle>{playlist.name}</CardTitle>
                   <CardDescription>{new Date(playlist.created_at).toLocaleString()}</CardDescription>
                 </div>
                 <Link href={`/playlists/${playlist.id}`} className={cn(buttonVariants({ size: "sm" }))}>

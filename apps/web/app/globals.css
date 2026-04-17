@@ -3,20 +3,73 @@
 @tailwind utilities;
 
 :root {
-  --background: 222 47% 6%;
-  --foreground: 210 40% 98%;
-  --muted: 217 33% 12%;
-  --muted-foreground: 215 20% 70%;
-  --primary: 188 94% 43%;
-  --primary-foreground: 222 47% 6%;
-  --border: 217 33% 18%;
-  --input: 217 33% 18%;
-  --ring: 188 94% 43%;
-  --radius: 0.75rem;
-  --card: 222 40% 8%;
-  --card-foreground: 210 40% 98%;
+  --background: 220 23% 97%;
+  --foreground: 222 47% 11%;
+  --muted: 220 14% 93%;
+  --muted-foreground: 215 16% 35%;
+  --primary: 222 47% 11%;
+  --primary-foreground: 0 0% 100%;
+  --border: 220 13% 90%;
+  --input: 220 13% 90%;
+  --ring: 222 47% 11%;
+  /* Slightly tighter corners for compact UI */
+  --radius: 0.625rem;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
 }
 
 body {
   @apply bg-background text-foreground antialiased;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-poppins), Poppins, ui-sans-serif, system-ui, sans-serif;
+  /* ~14px at typical 16px UA default; scales Tailwind rem spacing/type with user font prefs */
+  font-size: 87.5%;
+}
+
+button,
+input,
+select,
+textarea,
+optgroup,
+[role="button"] {
+  font-family: inherit;
+}
+
+.topbar-dropdown-item {
+  transition: background-color 0.15s ease;
+}
+.topbar-dropdown-item:hover {
+  background-color: #f3f4f6 !important;
+}
+.topbar-dropdown-item.topbar-dropdown-item--signout:hover {
+  background-color: #dc2626 !important;
+  color: #fff !important;
+}
+.topbar-dropdown-item.topbar-dropdown-item--signout:hover svg {
+  stroke: #fff !important;
+  color: #fff !important;
+}
+
+.top-nav-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.auth-card input::placeholder {
+  color: #9ca3af;
+}
+.auth-right-panel {
+  overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.auth-right-panel::-webkit-scrollbar {
+  display: none;
 }

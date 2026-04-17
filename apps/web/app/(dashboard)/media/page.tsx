@@ -15,7 +15,7 @@ export default async function MediaPage() {
   const publicBaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!publicBaseUrl) {
     return (
-      <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-6 text-sm text-destructive">
+      <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
         Missing NEXT_PUBLIC_SUPABASE_URL. Copy `apps/web/.env.example` to `.env.local`.
       </div>
     );

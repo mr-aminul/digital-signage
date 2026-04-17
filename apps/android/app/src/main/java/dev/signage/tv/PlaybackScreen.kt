@@ -1,9 +1,11 @@
 package dev.signage.tv
 
 import android.net.Uri
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -12,10 +14,12 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -27,15 +31,22 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun PlaybackScreen(state: MainUiState.Playback) {
-    Box(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .background(Color.Black),
-    ) {
-        if (state.slides.isEmpty()) {
-            return@Box
+    if (state.slides.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxSize().padding(32.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "Waiting for an active playlist on this device…\nAssign one in the web dashboard (Devices).",
+                style = MaterialTheme.typography.bodyLarge,
+                textAlign = TextAlign.Center,
+            )
         }
+        return
+    }
+
+    // Full-bleed signage: no titles or metadata over media
+    Box(modifier = Modifier.fillMaxSize()) {
         val slideKey = state.slides.joinToString("|") { "${it.url}#${it.fileType}" }
         var index by remember(slideKey) { mutableIntStateOf(0) }
         val slide = state.slides[index % state.slides.size]

@@ -17,9 +17,9 @@ export default async function DashboardHomePage() {
   ]);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <p className="mt-2 text-muted-foreground">
           Manage TV screens, playlists, and uploads. Pair TVs using anonymous auth + six-digit codes.
         </p>
@@ -27,11 +27,11 @@ export default async function DashboardHomePage() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="border-border bg-card">
           <CardHeader>
-            <CardTitle className="text-lg">Devices</CardTitle>
+            <CardTitle>Devices</CardTitle>
             <CardDescription>Linked TV players</CardDescription>
           </CardHeader>
           <CardContent className="flex items-end justify-between">
-            <p className="text-4xl font-semibold">{deviceCount ?? 0}</p>
+            <p className="text-3xl font-semibold tabular-nums">{deviceCount ?? 0}</p>
             <Link href="/devices" className={cn(buttonVariants({ size: "sm" }))}>
               Open
             </Link>
@@ -39,11 +39,11 @@ export default async function DashboardHomePage() {
         </Card>
         <Card className="border-border bg-card">
           <CardHeader>
-            <CardTitle className="text-lg">Playlists</CardTitle>
+            <CardTitle>Playlists</CardTitle>
             <CardDescription>Sequences shown on screens</CardDescription>
           </CardHeader>
           <CardContent className="flex items-end justify-between">
-            <p className="text-4xl font-semibold">{playlistCount ?? 0}</p>
+            <p className="text-3xl font-semibold tabular-nums">{playlistCount ?? 0}</p>
             <Link href="/playlists" className={cn(buttonVariants({ size: "sm" }))}>
               Open
             </Link>
@@ -51,11 +51,11 @@ export default async function DashboardHomePage() {
         </Card>
         <Card className="border-border bg-card">
           <CardHeader>
-            <CardTitle className="text-lg">Media</CardTitle>
+            <CardTitle>Media</CardTitle>
             <CardDescription>Images &amp; videos in storage</CardDescription>
           </CardHeader>
           <CardContent className="flex items-end justify-between">
-            <p className="text-4xl font-semibold">{mediaCount ?? 0}</p>
+            <p className="text-3xl font-semibold tabular-nums">{mediaCount ?? 0}</p>
             <Link href="/media" className={cn(buttonVariants({ size: "sm" }))}>
               Open
             </Link>

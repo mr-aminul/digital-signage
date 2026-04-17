@@ -1,7 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PROTECTED_PREFIXES = ["/devices", "/playlists", "/media", "/dashboard"];
+const PROTECTED_PREFIXES = ["/devices", "/playlists", "/media", "/dashboard", "/profile", "/settings"];
 
 function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PREFIXES.some(

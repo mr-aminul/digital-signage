@@ -178,7 +178,7 @@ export function PlaylistEditor({ playlistId, ownerId, initialName }: PlaylistEdi
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-sm text-muted-foreground">
@@ -186,7 +186,7 @@ export function PlaylistEditor({ playlistId, ownerId, initialName }: PlaylistEdi
               ← Back to playlists
             </Link>
           </p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight">Edit playlist</h1>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight">Edit playlist</h1>
         </div>
       </div>
 

@@ -14,9 +14,9 @@ export const buttonVariants = cva(
         destructive: "bg-red-600 text-white hover:bg-red-700",
       },
       size: {
-        default: "h-10 px-4 py-2",
-        sm: "h-9 rounded-md px-3",
-        lg: "h-11 rounded-md px-8",
+        default: "h-9 px-3 py-2",
+        sm: "h-8 rounded-md px-2.5 text-xs",
+        lg: "h-10 rounded-md px-6",
       },
     },
     defaultVariants: {

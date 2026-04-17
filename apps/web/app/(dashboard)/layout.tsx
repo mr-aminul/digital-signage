@@ -1,10 +1,24 @@
-import { DashboardNav } from "@/components/dashboard-nav";
+import { redirect } from "next/navigation";
+import { DashboardShell } from "@/components/shell/dashboard-shell";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const supabase = await getSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  const meta = user.user_metadata as Record<string, string | undefined> | undefined;
+  const fullName = meta?.full_name?.trim();
+  const displayName = fullName || user.email?.split("@")[0] || "User";
+
   return (
-    <div className="min-h-screen bg-background">
-      <DashboardNav />
-      <main className="mx-auto max-w-6xl space-y-8 px-6 py-10">{children}</main>
-    </div>
+    <DashboardShell userEmail={user.email ?? ""} displayName={displayName}>
+      {children}
+    </DashboardShell>
   );
 }

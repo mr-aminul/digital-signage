@@ -137,9 +137,9 @@ export function DevicesManager({ userId, initialDevices, playlists }: DevicesMan
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight">Devices</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Devices</h1>
         <p className="mt-2 text-muted-foreground">
           Enter the six-digit code shown on the TV (after it signs in anonymously). Status updates stream over Realtime.
         </p>
