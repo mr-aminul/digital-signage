@@ -56,11 +56,7 @@ class MainActivity : ComponentActivity() {
 
                         is MainUiState.AwaitingLink -> PairingScreen(ui)
 
-                        is MainUiState.Linked ->
-                            MessageScreen(
-                                title = "Device linked",
-                                body = "Dashboard assigned ${ui.deviceName}. Next: load playlist items + play with ExoPlayer.",
-                            )
+                        is MainUiState.Playback -> PlaybackScreen(ui)
                     }
                 }
             }

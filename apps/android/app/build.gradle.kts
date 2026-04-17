@@ -4,10 +4,11 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.serialization")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 val localProperties = Properties().apply {
-    val file = rootProject.file("local.properties")
+    val file = project.rootProject.file("local.properties")
     if (file.exists()) {
         file.inputStream().use { load(it) }
     }
@@ -24,8 +25,9 @@ android {
         versionCode = 1
         versionName = "0.1.0"
 
-        val supabaseUrl = (localProperties.getProperty("supabase.url") ?: "").trim()
-        val supabaseAnonKey = (localProperties.getProperty("supabase.anon.key") ?: "").trim()
+        val supabaseUrl = (project.findProperty("supabase.url") ?: "").toString().trim()
+        val supabaseAnonKey = (project.findProperty("supabase.anon.key") ?: "").toString().trim()
+
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
     }
@@ -54,10 +56,6 @@ android {
         buildConfig = true
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.15"
-    }
-
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -82,8 +80,8 @@ dependencies {
 
     implementation("com.google.android.material:material:1.12.0")
 
-    implementation("androidx.tv:tv-foundation:1.0.0-alpha11")
-    implementation("androidx.tv:tv-material:1.0.0-alpha11")
+    implementation("androidx.tv:tv-foundation:1.0.0-rc01")
+    implementation("androidx.tv:tv-material:1.0.0-rc01")
 
     implementation(platform("io.github.jan-tennert.supabase:bom:2.5.4"))
     implementation("io.github.jan-tennert.supabase:postgrest-kt")
@@ -93,6 +91,8 @@ dependencies {
 
     implementation("androidx.media3:media3-exoplayer:1.5.0")
     implementation("androidx.media3:media3-ui:1.5.0")
+
+    implementation("io.coil-kt:coil-compose:2.6.0")
 
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 }

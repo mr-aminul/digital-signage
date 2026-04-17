@@ -11,17 +11,31 @@ import io.github.jan.supabase.gotrue.Auth
 import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.result.PostgrestResult
+import io.github.jan.supabase.postgrest.query.Order
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import java.util.UUID
 import kotlin.random.Random
 
 private val Application.deviceDataStore by preferencesDataStore(name = "signage_device")
+
+/**
+ * PostgREST returns `[{...}]` by default, but `single()` uses `Accept: application/vnd.pgrst.object+json`,
+ * which returns `{...}`. supabase-kt's [PostgrestResult.decodeSingle] only accepts a JSON array.
+ */
+private inline fun <reified T : Any> PostgrestResult.decodeOneRow(): T {
+    val payload = data.trim()
+    return if (payload.startsWith("[")) decodeSingle<T>() else decodeAs<T>()
+}
 
 private object DeviceKeys {
     val DEVICE_ID = stringPreferencesKey("device_id")
@@ -37,17 +51,22 @@ sealed interface MainUiState {
         val message: String,
     ) : MainUiState
 
-    data class Linked(val deviceName: String) : MainUiState
+    data class Playback(
+        val deviceName: String,
+        val deviceId: String,
+        val playlistName: String?,
+        val slides: List<PlaybackSlide>,
+    ) : MainUiState
 
     data class Error(val message: String) : MainUiState
 }
 
 @Serializable
 data class DeviceInsert(
-    val pairingCode: String,
+    @SerialName("pairing_code") val pairingCode: String,
     val name: String = "Android TV",
     val status: String = "pending_pairing",
-    val registeredSessionId: String,
+    @SerialName("registered_session_id") val registeredSessionId: String,
 )
 
 @Serializable
@@ -59,8 +78,36 @@ data class DeviceRow(
     val status: String,
 )
 
+@Serializable
+private data class DevicePlaylistRow(
+    @SerialName("playlist_id") val playlistId: String,
+    @SerialName("is_active") val isActive: Boolean,
+)
+
+@Serializable
+private data class PlaylistItemSimpleRow(
+    val id: String,
+    @SerialName("sort_order") val sortOrder: Int,
+    @SerialName("duration_seconds") val durationSeconds: Int? = null,
+    @SerialName("media_id") val mediaId: String,
+)
+
+@Serializable
+private data class MediaRow(
+    val id: String,
+    @SerialName("storage_path") val storagePath: String,
+    @SerialName("file_type") val fileType: String,
+)
+
+@Serializable
+private data class PlaylistNameRow(
+    val id: String,
+    val name: String,
+)
+
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val dataStore = application.deviceDataStore
+    private var playbackObserveJob: Job? = null
 
     private val supabase by lazy {
         createSupabaseClient(
@@ -90,25 +137,54 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun startRegistrationFlow() {
-        supabase.auth.signInAnonymously()
+        // Attempt anonymous sign-in but don't crash if disabled
+        runCatching { supabase.auth.signInAnonymously() }
 
         val snapshot = dataStore.data.first()
         val storedDeviceId = snapshot[DeviceKeys.DEVICE_ID]
         val storedPairingCode = snapshot[DeviceKeys.PAIRING_CODE]
 
         if (storedDeviceId != null && storedPairingCode != null) {
-            _state.value =
-                MainUiState.AwaitingLink(
-                    pairingCode = storedPairingCode,
-                    deviceId = storedDeviceId,
-                    message = "Enter this code in the web dashboard to finish linking.",
-                )
-            pollUntilLinked(storedDeviceId)
-            return
+            val visible = fetchDeviceRow(storedDeviceId)
+            if (visible != null) {
+                if (visible.ownerId != null) {
+                    startPlaybackObservation(storedDeviceId, visible.name)
+                    return
+                }
+                _state.value =
+                    MainUiState.AwaitingLink(
+                        pairingCode = storedPairingCode,
+                        deviceId = storedDeviceId,
+                        message = "Enter this code in the web dashboard to finish linking.",
+                    )
+                pollUntilLinked(storedDeviceId)
+                return
+            }
+            // Row not visible to this session (new anonymous user, cleared DB, etc.) — drop stale cache
+            dataStore.edit { prefs ->
+                prefs.remove(DeviceKeys.DEVICE_ID)
+                prefs.remove(DeviceKeys.PAIRING_CODE)
+            }
         }
 
-        val pairingCode = storedPairingCode ?: generatePairingCode()
-        val userId = supabase.auth.currentUserOrNull()?.id ?: error("Anonymous session missing")
+        createNewDeviceAndPoll()
+    }
+
+    /** Uses a normal JSON array response (no `.single()`); RLS returns [] if this session cannot see the row. */
+    private suspend fun fetchDeviceRow(deviceId: String): DeviceRow? =
+        supabase
+            .from("devices")
+            .select {
+                filter {
+                    eq("id", deviceId)
+                }
+            }.decodeList<DeviceRow>()
+            .firstOrNull()
+
+    private suspend fun createNewDeviceAndPoll() {
+        val pairingCode = generatePairingCode()
+        // Use Supabase user ID if available, otherwise generate a persistent installation ID
+        val registrationId = supabase.auth.currentUserOrNull()?.id ?: UUID.randomUUID().toString()
 
         val inserted =
             supabase
@@ -116,10 +192,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 .insert(
                     DeviceInsert(
                         pairingCode = pairingCode,
-                        registeredSessionId = userId,
+                        registeredSessionId = registrationId,
                     ),
                 ) { select() }
-                .decodeSingle<DeviceRow>()
+                .decodeOneRow<DeviceRow>()
 
         dataStore.edit { prefs ->
             prefs[DeviceKeys.DEVICE_ID] = inserted.id
@@ -139,17 +215,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun pollUntilLinked(deviceId: String) {
         while (true) {
             val row =
-                supabase
-                    .from("devices")
-                    .select {
-                        filter {
-                            eq("id", deviceId)
-                        }
-                        single()
-                    }.decodeSingle<DeviceRow>()
+                try {
+                    fetchDeviceRow(deviceId)
+                } catch (_: Exception) {
+                    delay(10_000)
+                    continue
+                }
+
+            if (row == null) {
+                // No row: stale local id for this anon session, or device removed — register again
+                dataStore.edit { prefs ->
+                    prefs.remove(DeviceKeys.DEVICE_ID)
+                    prefs.remove(DeviceKeys.PAIRING_CODE)
+                }
+                createNewDeviceAndPoll()
+                return
+            }
 
             if (row.ownerId != null) {
-                _state.value = MainUiState.Linked(row.name)
+                startPlaybackObservation(deviceId, row.name)
                 return
             }
 
@@ -157,7 +241,95 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun startPlaybackObservation(deviceId: String, deviceName: String) {
+        playbackObserveJob?.cancel()
+        playbackObserveJob =
+            viewModelScope.launch {
+                while (isActive) {
+                    try {
+                        _state.value = loadPlaybackState(deviceId, deviceName)
+                    } catch (_: Exception) {
+                        _state.value =
+                            MainUiState.Playback(
+                                deviceName = deviceName,
+                                deviceId = deviceId,
+                                playlistName = null,
+                                slides = emptyList(),
+                            )
+                    }
+                    delay(4_000)
+                }
+            }
+    }
+
+    private suspend fun loadPlaybackState(
+        deviceId: String,
+        deviceName: String,
+    ): MainUiState.Playback {
+        val assignment =
+            supabase
+                .from("device_playlists")
+                .select {
+                    filter {
+                        eq("device_id", deviceId)
+                        eq("is_active", true)
+                    }
+                }.decodeList<DevicePlaylistRow>()
+                .firstOrNull()
+        if (assignment == null) {
+            return MainUiState.Playback(deviceName, deviceId, null, emptyList())
+        }
+        val playlistId = assignment.playlistId
+        val playlistName =
+            supabase
+                .from("playlists")
+                .select {
+                    filter { eq("id", playlistId) }
+                }.decodeList<PlaylistNameRow>()
+                .firstOrNull()
+                ?.name
+
+        val items =
+            supabase
+                .from("playlist_items")
+                .select {
+                    filter { eq("playlist_id", playlistId) }
+                    order(column = "sort_order", order = Order.ASCENDING)
+                }.decodeList<PlaylistItemSimpleRow>()
+
+        val slides = mutableListOf<PlaybackSlide>()
+        for (item in items) {
+            val mediaList =
+                supabase
+                    .from("media")
+                    .select {
+                        filter { eq("id", item.mediaId) }
+                    }.decodeList<MediaRow>()
+            val m = mediaList.firstOrNull() ?: continue
+            if (m.storagePath.isBlank()) continue
+            slides.add(
+                PlaybackSlide(
+                    url = publicMediaUrl(m.storagePath),
+                    fileType = m.fileType,
+                    durationSeconds = item.durationSeconds,
+                ),
+            )
+        }
+        return MainUiState.Playback(deviceName, deviceId, playlistName, slides)
+    }
+
+    private fun publicMediaUrl(storagePath: String): String {
+        val base = BuildConfig.SUPABASE_URL.trimEnd('/')
+        val encoded =
+            storagePath.split("/").joinToString("/") { segment ->
+                java.net.URLEncoder.encode(segment, Charsets.UTF_8.name()).replace("+", "%20")
+            }
+        return "$base/storage/v1/object/public/media/$encoded"
+    }
+
     fun resetRegistration() {
+        playbackObserveJob?.cancel()
+        playbackObserveJob = null
         viewModelScope.launch {
             runCatching {
                 dataStore.edit { prefs ->
