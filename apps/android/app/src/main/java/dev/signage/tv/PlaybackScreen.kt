@@ -1,10 +1,13 @@
 package dev.signage.tv
 
+import android.content.pm.ActivityInfo
 import android.graphics.Color
 import android.util.Log
 import android.view.LayoutInflater
+import androidx.activity.ComponentActivity
 import androidx.annotation.OptIn
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -40,53 +43,73 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 private const val LOG_TAG = "SignageTV"
 
+@Composable
+private fun MismatchOrEmptyScreen(
+    userMessage: String,
+    code: String,
+) {
+    Box(
+        modifier = Modifier.fillMaxSize().padding(32.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = userMessage,
+                style = MaterialTheme.typography.bodyLarge,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                text = "Error code: $code",
+                modifier = Modifier.padding(top = 16.dp),
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
 @OptIn(UnstableApi::class)
 @Composable
 fun PlaybackScreen(
     state: MainUiState.Playback,
     viewModel: MainViewModel,
 ) {
+    val context = LocalContext.current
+    LaunchedEffect(state.screenOrientation) {
+        val activity = context as? ComponentActivity ?: return@LaunchedEffect
+        activity.requestedOrientation =
+            when (state.screenOrientation.lowercase()) {
+                "portrait" -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                else -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            }
+    }
+
     if (state.isRegistrationMismatch) {
-        Box(
-            modifier = Modifier.fillMaxSize().padding(32.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text =
-                    "This screen lost its link to the server (anonymous session no longer matches).\n" +
-                        "In the app, use Reset, then enter the new pairing code on the web dashboard to link again.",
-                style = MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Center,
-            )
-        }
+        MismatchOrEmptyScreen(
+            userMessage =
+                "This screen is no longer linked. On the TV: choose Reset, then add the new pairing code in the web app.",
+            code = TvUserFacingError.LINK_LOST,
+        )
         return
     }
     if (state.slides.isEmpty()) {
-        val message =
-            if (state.playlistName == null) {
-                "Waiting for an active playlist on this device…\n" +
-                    "In the web app, open Devices, pick this screen, and choose a playlist (or create one and add media)."
-            } else {
-                "This screen’s active playlist is empty (“${state.playlistName}”).\n" +
-                    "In the web app, open Playlists (or the device’s playlist editor) and add images or videos, then sync the TV app."
-            }
-        Box(
-            modifier = Modifier.fillMaxSize().padding(32.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Center,
-            )
-        }
+        MismatchOrEmptyScreen(
+            userMessage =
+                if (state.playlistName == null) {
+                    "No playlist to show. Assign a playlist to this display in the web app."
+                } else {
+                    "The active playlist is empty. Add content in the web app, and this display will update shortly."
+                },
+            code = if (state.playlistName == null) TvUserFacingError.NO_PLAYLIST else TvUserFacingError.EMPTY_PLAYLIST,
+        )
         return
     }
 
     val engine = remember { viewModel.exoForPlayback() }
     val slideKey =
         state.slides.joinToString("|") { s ->
-            "${s.url}#${s.fileType}#${s.durationSeconds}"
+            "${s.url}#${s.fileType}#${s.durationSeconds}#${state.contentRevision}#${state.isFromCache}"
         }
     var index by remember(slideKey) { mutableIntStateOf(0) }
     var visit by remember(slideKey) { mutableIntStateOf(0) }
@@ -100,7 +123,7 @@ fun PlaybackScreen(
             null
         }
 
-    LaunchedEffect(index, state.slides) {
+    LaunchedEffect(index, state.slides, state.contentRevision) {
         viewModel.onPlaybackSlideContext(index, state.slides)
     }
 
@@ -155,6 +178,8 @@ private fun SharedExoVideoSlide(
         mutableStateOf(holdImageUrl == null)
     }
 
+    // Bind in [AndroidView.update] (same frame as PlayerView#player) instead of [LaunchedEffect], which
+    // runs on the next frame and adds a visible delay after the view attaches the surface.
     Box(modifier = Modifier.fillMaxSize()) {
         if (holdImageUrl != null) {
             HoldUnderImageFullBleed(url = holdImageUrl)
@@ -278,10 +303,10 @@ private fun ImageSlide(
         when (val s = painter.state) {
             is AsyncImagePainter.State.Success -> SubcomposeAsyncImageContent()
             is AsyncImagePainter.State.Error -> {
-                val detail = s.result.throwable?.message ?: s.result.toString()
+                Log.e(LOG_TAG, "Slide image load failed: $url", s.result.throwable)
                 Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
                     Text(
-                        text = "Could not load image.\n$detail",
+                        text = "This slide could not be shown. Error code: ${TvUserFacingError.SLIDE_LOAD}",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onBackground,
                         textAlign = TextAlign.Center,

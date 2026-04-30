@@ -33,7 +33,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
 @UnstableApi
 @androidx.annotation.OptIn(UnstableApi::class)
 class SignageExoController(
@@ -133,10 +132,14 @@ class SignageExoController(
         finished.set(false)
         mainHandler.removeCallbacksAndMessages(null)
         maxDurationRunnable = null
+        val uri = Uri.parse(url)
+        // Do not call clearVideoSurface() / setVideoSurface(null) here. Compose runs AndroidView
+        // factory (PlayerView sets this player and attaches the surface) in the same frame, then
+        // LaunchedEffect; clearing the surface in bind would run after attach and break rendering.
         firstFrameListener?.let { exo.removeAnalyticsListener(it) }
         firstFrameListener = null
         playbackListener?.let { exo.removeListener(it) }
-        exo.setMediaItem(MediaItem.fromUri(Uri.parse(url)))
+        exo.setMediaItem(MediaItem.fromUri(uri))
         exo.seekTo(0L)
         val l =
             object : Player.Listener {

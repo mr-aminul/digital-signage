@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -21,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.size
 import androidx.core.view.WindowCompat
 import dev.signage.tv.ui.theme.SignageTvTheme
 
@@ -35,24 +37,36 @@ class MainActivity : ComponentActivity() {
                 val state by viewModel.state.collectAsState()
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     when (val ui = state) {
-                        MainUiState.MissingConfig ->
-                            MessageScreen(
-                                title = "Supabase configuration missing",
-                                body = "Copy local.properties.example to local.properties and set supabase.url + supabase.anon.key, then rebuild.",
-                            )
+                        MainUiState.Initializing -> TvLoadingScreen(message = "Starting…")
 
-                        is MainUiState.Error ->
-                            Column(
-                                modifier = Modifier.fillMaxSize().padding(48.dp),
-                                verticalArrangement = Arrangement.Center,
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                            ) {
-                                Text(text = ui.message, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
-                                Spacer(modifier = Modifier.height(24.dp))
-                                Button(onClick = { viewModel.resetRegistration() }) {
-                                    Text("Reset registration")
+                        MainUiState.MissingConfig -> TvErrorCodeScreen(
+                            userMessage = "Supabase URL or anon key is missing or still a placeholder. Set supabase.url and supabase.anon.key in local.properties (apps/android or repo root), sync Gradle, rebuild, and enable Anonymous sign-ins in the Supabase dashboard.",
+                            code = TvUserFacingError.CONFIG_INCOMPLETE,
+                        )
+
+                        is MainUiState.Error -> {
+                            val (msg, showReset) =
+                                if (ui.code == TvUserFacingError.RELAUNCH_TO_PAIR) {
+                                    "Registration was cleared. Restart this app, then get a new pairing code from the web app." to false
+                                } else {
+                                    "Something went wrong. If this continues, share the code below with support." to true
                                 }
-                            }
+                            TvErrorCodeScreen(
+                                userMessage = msg,
+                                code = ui.code,
+                                extraContent =
+                                    if (showReset) {
+                                        {
+                                            Spacer(modifier = Modifier.height(24.dp))
+                                            Button(onClick = { viewModel.resetRegistration() }) {
+                                                Text("Reset registration")
+                                            }
+                                        }
+                                    } else {
+                                        null
+                                    },
+                            )
+                        }
 
                         is MainUiState.AwaitingLink -> PairingScreen(ui)
 
@@ -65,15 +79,46 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun MessageScreen(title: String, body: String) {
+private fun TvLoadingScreen(message: String) {
     Column(
         modifier = Modifier.fillMaxSize().padding(48.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(text = title, style = MaterialTheme.typography.titleLarge)
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(text = body, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
+        CircularProgressIndicator(modifier = Modifier.size(48.dp))
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+private fun TvErrorCodeScreen(
+    userMessage: String,
+    code: String,
+    extraContent: (@Composable () -> Unit)? = null,
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(48.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = userMessage,
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(modifier = Modifier.height(20.dp))
+        Text(
+            text = "Error code: $code",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.primary,
+            textAlign = TextAlign.Center,
+        )
+        extraContent?.invoke()
     }
 }
 

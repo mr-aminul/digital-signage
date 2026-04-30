@@ -1,3 +1,4 @@
+import java.io.File
 import java.util.Properties
 
 plugins {
@@ -7,10 +8,26 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+/** Monorepo root first, then `apps/android/` — latter wins for duplicate keys. */
 val localProperties = Properties().apply {
-    val file = project.rootProject.file("local.properties")
-    if (file.exists()) {
-        file.inputStream().use { load(it) }
+    fun loadFrom(file: File) {
+        if (file.exists()) file.inputStream().use { load(it) }
+    }
+    val androidProjectDir = project.rootProject.projectDir
+    loadFrom(File(androidProjectDir.parentFile, "local.properties"))
+    loadFrom(File(androidProjectDir, "local.properties"))
+}
+
+private fun sanitizedSupabaseFromLocal(props: Properties): Pair<String, String> {
+    val rawUrl = (props.getProperty("supabase.url") ?: "").trim()
+    val rawKey = (props.getProperty("supabase.anon.key") ?: "").trim()
+    val looksLikeTemplate =
+        rawUrl.contains("YOUR_", ignoreCase = true) ||
+            rawKey.contains("YOUR_", ignoreCase = true)
+    return if (looksLikeTemplate || rawUrl.isBlank() || rawKey.isBlank()) {
+        "" to ""
+    } else {
+        rawUrl to rawKey
     }
 }
 
@@ -25,8 +42,7 @@ android {
         versionCode = 1
         versionName = "0.1.0"
 
-        val supabaseUrl = (localProperties.getProperty("supabase.url") ?: "").trim()
-        val supabaseAnonKey = (localProperties.getProperty("supabase.anon.key") ?: "").trim()
+        val (supabaseUrl, supabaseAnonKey) = sanitizedSupabaseFromLocal(localProperties)
 
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
