@@ -27,7 +27,6 @@ function PreviewSlide({
   onVideoDone: () => void;
 }) {
   const url = mediaUrl(publicBaseUrl, item.media.storage_path);
-  const capSec = item.duration_seconds;
   const videoRef = useRef<HTMLVideoElement>(null);
   const videoDoneRef = useRef(false);
 
@@ -63,23 +62,9 @@ function PreviewSlide({
       onVideoDone();
     };
 
-    const onEnded = () => finish();
-
-    const onTimeUpdate = () => {
-      if (capSec == null) return;
-      if (el.currentTime >= capSec - 0.05) {
-        el.pause();
-        finish();
-      }
-    };
-
-    el.addEventListener("ended", onEnded);
-    el.addEventListener("timeupdate", onTimeUpdate);
-    return () => {
-      el.removeEventListener("ended", onEnded);
-      el.removeEventListener("timeupdate", onTimeUpdate);
-    };
-  }, [item.media.file_type, capSec, onVideoDone, url]);
+    el.addEventListener("ended", finish);
+    return () => el.removeEventListener("ended", finish);
+  }, [item.media.file_type, onVideoDone, url]);
 
   if (item.media.file_type === "video") {
     return (
@@ -209,7 +194,7 @@ export function PlaylistPreviewButton({
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 space-y-3">
               <p className="text-xs text-muted-foreground">
-                Local preview using your playlist order and durations (not the live TV). Use arrow keys to change slides.
+                Local preview using your playlist order and image durations (videos always play in full). Use arrow keys to change slides.
               </p>
               <p className="text-xs text-muted-foreground">{frameCaption}</p>
               {hasDeviceDisplay ? (

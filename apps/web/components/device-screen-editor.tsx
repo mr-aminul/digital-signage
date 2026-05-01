@@ -26,11 +26,14 @@ import { Label } from "@/components/ui/label";
 import type { DeviceWithAssignments } from "@/lib/console-sync";
 import { useStaleOnlineTick } from "@/hooks/use-stale-online-tick";
 import { effectiveDeviceStatus } from "@/lib/device-status";
+import { formatPlaylistClockLabel } from "@/lib/playlist-timing";
 import { cn } from "@/lib/utils";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useConsoleDataStore } from "@/stores/console-data-store";
+import { DevicePlaybackToggle } from "@/components/device-playback-toggle";
 import { DeviceScreenOrientationSettings } from "@/components/device-screen-orientation-settings";
 import { PlaylistPreviewButton } from "@/components/playlist-preview";
+import { ReadonlyVideoDuration } from "@/components/readonly-video-duration";
 import {
   DeviceTelemetryMoreButton,
   deviceScreenBasics,
@@ -49,16 +52,9 @@ function reorder<T>(list: T[], startIndex: number, endIndex: number): T[] {
 }
 
 function mediaUrl(publicBaseUrl: string, storagePath: string) {
-  return `${publicBaseUrl}/storage/v1/object/public/media/${storagePath}`;
-}
-
-function formatDurationShort(totalSec: number): string {
-  const s = Math.max(0, Math.round(totalSec));
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  const rem = s % 60;
-  if (rem === 0) return `${m}m`;
-  return `${m}m ${rem}s`;
+  const base = publicBaseUrl.replace(/\/$/, "");
+  const path = storagePath.split("/").map(encodeURIComponent).join("/");
+  return `${base}/storage/v1/object/public/media/${path}`;
 }
 
 function formatLastSeen(iso: string | null): string {
@@ -319,13 +315,14 @@ export function DeviceScreenEditor({ deviceId, ownerId, publicBaseUrl }: DeviceS
       if (!playlistId) return;
       const sortLen =
         useConsoleDataStore.getState().playlistItemsByPlaylistId[playlistId]?.length ?? 0;
+      const mediaRow = allMedia.find((m) => m.id === mediaId);
       const { data: row, error } = await supabase
         .from("playlist_items")
         .insert({
           playlist_id: playlistId,
           media_id: mediaId,
           sort_order: sortLen,
-          duration_seconds: 10,
+          duration_seconds: mediaRow?.file_type === "video" ? null : 10,
         })
         .select("id")
         .single();
@@ -345,7 +342,7 @@ export function DeviceScreenEditor({ deviceId, ownerId, publicBaseUrl }: DeviceS
         setItems(fresh);
       }
     },
-    [persistOrder, playlistId, reloadFromServer, supabase],
+    [allMedia, persistOrder, playlistId, reloadFromServer, supabase],
   );
 
   const onDragEnd = useCallback(
@@ -403,10 +400,7 @@ export function DeviceScreenEditor({ deviceId, ownerId, publicBaseUrl }: DeviceS
     [device],
   );
 
-  const playlistTotalSeconds = useMemo(
-    () => items.reduce((acc, row) => acc + (row.duration_seconds ?? 10), 0),
-    [items],
-  );
+  const playlistTimingLabel = useMemo(() => formatPlaylistClockLabel(items), [items]);
 
   const addMediaByClick = useCallback(
     (mediaId: string) => {
@@ -594,11 +588,19 @@ export function DeviceScreenEditor({ deviceId, ownerId, publicBaseUrl }: DeviceS
             </div>
 
             <div className="flex w-full shrink-0 flex-wrap justify-start gap-2 border-t border-border pt-6 lg:w-auto lg:self-center lg:justify-end lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
+              <DevicePlaybackToggle device={device} />
               <DeviceScreenOrientationSettings device={device} />
               <DeviceTelemetryMoreButton device={device} />
             </div>
           </div>
         </div>
+
+      {device.playback_disabled ? (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-950 dark:text-amber-100">
+          Playlist playback is paused for this screen. The TV shows the app logo and “Device disabled by admin” until you
+          choose <span className="font-medium">Resume playlist on TV</span>.
+        </div>
+      ) : null}
 
       {!playlistId ? (
         <section className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm dark:bg-card">
@@ -640,7 +642,7 @@ export function DeviceScreenEditor({ deviceId, ownerId, publicBaseUrl }: DeviceS
                       </span>
                       <span className="inline-flex items-center gap-1 rounded-full border border-border bg-white px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm dark:bg-card">
                         <Clock className="h-3.5 w-3.5" />
-                        {formatDurationShort(playlistTotalSeconds)}
+                        {playlistTimingLabel}
                       </span>
                       <PlaylistPreviewButton
                         items={items}
@@ -726,29 +728,33 @@ export function DeviceScreenEditor({ deviceId, ownerId, publicBaseUrl }: DeviceS
                                         <span className="text-xs capitalize">{item.media.file_type}</span>
                                       </div>
                                       <div>
-                                        <Label className="sr-only" htmlFor={`dur-${item.id}`}>
-                                          {item.media.file_type === "video"
-                                            ? "Max on-screen (seconds, empty = full video length)"
-                                            : "Duration (seconds)"}
-                                        </Label>
-                                        <Input
-                                          id={`dur-${item.id}`}
-                                          type="number"
-                                          min={1}
-                                          className="h-9 w-full min-w-0 text-sm tabular-nums"
-                                          key={`d-${item.id}-${item.duration_seconds}`}
-                                          defaultValue={item.duration_seconds ?? 10}
-                                          onBlur={(e) => {
-                                            const raw = e.target.value.trim();
-                                            if (raw === "" && item.media.file_type === "video") {
-                                              void updateDuration(item.id, null);
-                                              return;
-                                            }
-                                            const value = Number(e.target.value);
-                                            const nextValue = Number.isFinite(value) && value > 0 ? value : null;
-                                            void updateDuration(item.id, nextValue);
-                                          }}
-                                        />
+                                        {item.media.file_type === "video" ? (
+                                          <ReadonlyVideoDuration
+                                            id={`duration-video-${item.id}`}
+                                            durationSeconds={item.media.duration_seconds}
+                                            fallbackProbeUrl={mediaUrl(publicBaseUrl, item.media.storage_path)}
+                                          />
+                                        ) : (
+                                          <>
+                                            <Label className="sr-only" htmlFor={`dur-${item.id}`}>
+                                              Duration (seconds)
+                                            </Label>
+                                            <Input
+                                              id={`dur-${item.id}`}
+                                              type="number"
+                                              min={1}
+                                              className="h-9 w-full min-w-0 text-sm tabular-nums"
+                                              key={`d-${item.id}-${item.duration_seconds}`}
+                                              defaultValue={item.duration_seconds ?? 10}
+                                              onBlur={(e) => {
+                                                const raw = e.target.value.trim();
+                                                const value = Number(raw);
+                                                const nextValue = Number.isFinite(value) && value > 0 ? value : null;
+                                                void updateDuration(item.id, nextValue);
+                                              }}
+                                            />
+                                          </>
+                                        )}
                                       </div>
                                       <div className="flex justify-end">
                                         <Button
@@ -763,12 +769,6 @@ export function DeviceScreenEditor({ deviceId, ownerId, publicBaseUrl }: DeviceS
                                         </Button>
                                       </div>
                                     </div>
-                                    {item.media.file_type === "video" && (
-                                      <p className="ml-5 mt-1 text-[0.7rem] leading-tight text-muted-foreground sm:ml-12">
-                                        Max seconds caps how long the video shows on the TV. Leave empty to play the full file
-                                        once.
-                                      </p>
-                                    )}
                                   </div>
                                 )}
                               </Draggable>

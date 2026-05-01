@@ -1,6 +1,7 @@
 package dev.signage.tv
 
 import android.app.Application
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import androidx.annotation.OptIn
@@ -18,14 +19,22 @@ import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.result.PostgrestResult
 import io.github.jan.supabase.postgrest.rpc
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.selects.onTimeout
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -54,6 +63,8 @@ private inline fun <reified T : Any> PostgrestResult.decodeOneRow(): T {
 private object DeviceKeys {
     val DEVICE_ID = stringPreferencesKey("device_id")
     val PAIRING_CODE = stringPreferencesKey("pairing_code")
+    /** Issued when an admin links the screen; survives anonymous auth rotation on the TV. */
+    val PLAYBACK_SECRET = stringPreferencesKey("playback_secret")
     val CACHED_PLAYBACK = stringPreferencesKey("cached_playback_v1")
     /** [android.provider.Settings.Secure.ANDROID_ID] for this app; stable for identifying this install. */
     val ANDROID_INSTALLATION_ID = stringPreferencesKey("android_installation_id")
@@ -80,14 +91,19 @@ sealed interface MainUiState {
         val deviceId: String,
         val playlistName: String?,
         val slides: List<PlaybackSlide>,
-        /** True when tv_get_playback_slides rejected the caller (lost anon session vs registered_session_id). */
-        val isRegistrationMismatch: Boolean = false,
         /** In-memory; last successful RPC (or cache on cold start) had network payload. */
         val isFromCache: Boolean = false,
         val contentRevision: String? = null,
         val playlistId: String? = null,
         /** Mirrors [DeviceRow.screenOrientation] from poll (dashboard setting). */
         val screenOrientation: String = "landscape",
+        /** Admin paused playback in the dashboard; show standby branding instead of slides or errors. */
+        val playbackDisabledByAdmin: Boolean = false,
+        /**
+         * Bumped when the display returns after standby so [MutableStateFlow] emits even if the server
+         * manifest is unchanged, and so the UI restarts the playlist like a fresh sync.
+         */
+        val uiRefreshGeneration: Long = 0L,
     ) : MainUiState
 
     /**
@@ -119,11 +135,19 @@ data class DeviceRow(
 private data class TvGetPlaybackParams(
     @SerialName("p_device_id")
     val pDeviceId: String,
+    @SerialName("p_playback_secret")
+    val pPlaybackSecret: String? = null,
 )
 
 @Serializable
 private data class TvGetPlaybackResult(
     val ok: Boolean,
+    @SerialName("deviceName")
+    val deviceName: String? = null,
+    @SerialName("playbackDisabled")
+    val playbackDisabled: Boolean = false,
+    @SerialName("playbackSecret")
+    val playbackSecret: String? = null,
     val playlistName: String? = null,
     val contentRevision: String? = null,
     val playlistId: String? = null,
@@ -158,8 +182,22 @@ private data class TvMergePlaybackSnapshotParams(
 
 private const val TELEMETRY_INTERVAL_MS = 120_000L
 
+/** Avoid double UI recovery when both activity resume and [android.content.Intent.ACTION_SCREEN_ON] fire. */
+private const val FOREGROUND_RECOVERY_DEBOUNCE_MS = 750L
+
 private const val ANONYMOUS_SIGN_IN_MAX_ATTEMPTS = 8
 private const val SUPABASE_NETWORK_RETRY_MAX = 4
+
+/** Between full startup attempts when registration cannot reach Supabase yet (TV stays on loading). */
+private const val STARTUP_RETRY_DELAY_INITIAL_MS = 2_000L
+private const val STARTUP_RETRY_DELAY_MAX_MS = 60_000L
+
+private sealed interface PlaybackLoadResult {
+    data class Ok(val state: MainUiState.Playback) : PlaybackLoadResult
+
+    /** [tv_get_playback_slides] returned ok=false — local credentials do not authorize this device. */
+    data object NeedsRePairing : PlaybackLoadResult
+}
 
 @OptIn(UnstableApi::class)
 class MainViewModel(
@@ -172,6 +210,18 @@ class MainViewModel(
     private val lastContentRevision = AtomicReference<String?>(null)
     private var signageExo: SignageExoController? = null
 
+    /** Wakes the playback poll loop immediately (conflated). */
+    private val immediatePlaybackPoll = Channel<Unit>(Channel.CONFLATED)
+
+    /**
+     * Bumped when the activity resumes or the screen turns on so Compose remounts the current slide
+     * even if the playlist poll returns an identical payload ([MutableStateFlow] would otherwise not emit).
+     */
+    private val _playbackUiRecoveryEpoch = MutableStateFlow(0L)
+    val playbackUiRecoveryEpoch: StateFlow<Long> = _playbackUiRecoveryEpoch.asStateFlow()
+
+    private var lastPlaybackForegroundRecoveryAtElapsedMs = 0L
+
     private val supabase by lazy {
         createSupabaseClient(
             supabaseUrl = BuildConfig.SUPABASE_URL,
@@ -180,6 +230,7 @@ class MainViewModel(
             httpEngine = KtorClientProvider.unsafeHttpClient.engine
             install(Auth)
             install(Postgrest)
+            // HttpTimeout is already installed in KtorClientProvider.unsafeHttpClient
         }
     }
 
@@ -192,21 +243,68 @@ class MainViewModel(
             _state.value = MainUiState.MissingConfig
         } else {
             viewModelScope.launch {
-                runCatching {
-                    startRegistrationFlow()
-                }.onFailure { throwable ->
-                    Log.e(LOG_TAG, "TvUserFacingError ${TvUserFacingError.STARTUP_FAILED} startRegistrationFlow", throwable)
-                    _state.value = MainUiState.Error(TvUserFacingError.STARTUP_FAILED)
-                    publishPlaybackUnavailableToCloud(TvUserFacingError.STARTUP_FAILED)
-                }
+                runStartupUntilConnected()
             }
         }
     }
 
     private fun ensureSignageExo() {
         if (signageExo == null) {
-            signageExo = SignageExoController(getApplication())
+            signageExo =
+                SignageExoController(getApplication()).also { controller ->
+                    controller.onHardPlaybackRecovery = {
+                        requestPlaybackUiRecovery(reason = "exo_stall")
+                    }
+                }
         }
+    }
+
+    private fun releaseSignageExo() {
+        signageExo?.release()
+        signageExo = null
+    }
+
+    /**
+     * Called when the TV returns from standby or Exo reports a hard stall. Forces slide/media views to
+     * remount without requiring a dashboard-side playlist change.
+     */
+    fun requestPlaybackUiRecovery(reason: String) {
+        val s = _state.value
+        if (s !is MainUiState.Playback || s.playbackDisabledByAdmin || s.slides.isEmpty()) {
+            return
+        }
+        Log.i(LOG_TAG, "playback UI recovery ($reason)")
+        _playbackUiRecoveryEpoch.update { it + 1 }
+    }
+
+    /** Activity visible again after pause, or [Intent.ACTION_SCREEN_ON] on some TVs. */
+    fun onPlaybackForegroundEvent() {
+        val s = _state.value
+        val now = SystemClock.elapsedRealtime()
+        if (s is MainUiState.Playback &&
+            !s.playbackDisabledByAdmin &&
+            s.slides.isNotEmpty() &&
+            now - lastPlaybackForegroundRecoveryAtElapsedMs >= FOREGROUND_RECOVERY_DEBOUNCE_MS
+        ) {
+            lastPlaybackForegroundRecoveryAtElapsedMs = now
+            Log.i(LOG_TAG, "playback foreground: resync from server + decoder reset")
+            signageExo?.resetDecoderStateAfterDisplayWake()
+            val deviceId = s.deviceId
+            _state.update { cur ->
+                if (cur is MainUiState.Playback && cur.deviceId == deviceId && !cur.playbackDisabledByAdmin && cur.slides.isNotEmpty()) {
+                    cur.copy(uiRefreshGeneration = cur.uiRefreshGeneration + 1)
+                } else {
+                    cur
+                }
+            }
+            requestPlaybackUiRecovery(reason = "foreground")
+            immediatePlaybackPoll.trySend(Unit)
+        }
+        signageExo?.onActivityResume()
+    }
+
+    fun onPlaybackBackgroundEvent() {
+        signageExo?.onActivityPause()
     }
 
     fun exoForPlayback(): SignageExoController {
@@ -232,29 +330,29 @@ class MainViewModel(
         }
     }
 
-    private suspend fun readCachedPlaybackOnly(deviceId: String): MainUiState.Playback? {
-        val raw = dataStore.data.first()[DeviceKeys.CACHED_PLAYBACK] ?: return null
+    private suspend fun readCachedPlaybackOnly(deviceId: String): MainUiState.Playback? = withContext(Dispatchers.IO) {
+        val raw = dataStore.data.first()[DeviceKeys.CACHED_PLAYBACK] ?: return@withContext null
         val cached = runCatching { cachedPlaybackJson.decodeFromString<CachedPlaybackV1>(raw) }.getOrNull()
-            ?: return null
+            ?: return@withContext null
         if (cached.deviceId != deviceId) {
-            return null
+            return@withContext null
         }
         if (cached.slides.isEmpty()) {
-            return null
+            return@withContext null
         }
         val orient =
             cached.screenOrientation.trim().lowercase().takeIf { it == "portrait" || it == "landscape" }
                 ?: "landscape"
-        return MainUiState.Playback(
-            deviceName = "",
+        MainUiState.Playback(
+            deviceName = cached.deviceDisplayName,
             deviceId = deviceId,
             playlistName = cached.playlistName,
             slides = cached.slides,
-            isRegistrationMismatch = false,
             isFromCache = true,
             contentRevision = cached.contentRevision,
             playlistId = cached.playlistId,
             screenOrientation = orient,
+            playbackDisabledByAdmin = false,
         )
     }
 
@@ -263,13 +361,15 @@ class MainViewModel(
         res: TvGetPlaybackResult,
         slides: List<PlaybackSlide>,
         screenOrientation: String,
-    ) {
+        deviceDisplayName: String,
+    ) = withContext(Dispatchers.IO) {
         if (slides.isEmpty()) {
-            return
+            return@withContext
         }
         val payload =
             CachedPlaybackV1(
                 deviceId = deviceId,
+                deviceDisplayName = deviceDisplayName,
                 playlistName = res.playlistName,
                 contentRevision = res.contentRevision,
                 playlistId = res.playlistId,
@@ -277,11 +377,39 @@ class MainViewModel(
                 slides = slides,
                 screenOrientation = screenOrientation,
             )
-        dataStore.edit { it[DeviceKeys.CACHED_PLAYBACK] = cachedPlaybackJson.encodeToString(CachedPlaybackV1.serializer(), payload) }
+        val encoded = cachedPlaybackJson.encodeToString(CachedPlaybackV1.serializer(), payload)
+        dataStore.edit { it[DeviceKeys.CACHED_PLAYBACK] = encoded }
     }
 
     private suspend fun clearCachedPlayback() {
         dataStore.edit { it.remove(DeviceKeys.CACHED_PLAYBACK) }
+    }
+
+    /** Clears locally stored device identity so the app can register fresh (new pairing code). */
+    private suspend fun clearLocalDevicePairingKeys() {
+        dataStore.edit { prefs ->
+            prefs.remove(DeviceKeys.DEVICE_ID)
+            prefs.remove(DeviceKeys.PAIRING_CODE)
+            prefs.remove(DeviceKeys.REGISTERED_SESSION_ID)
+            prefs.remove(DeviceKeys.PLAYBACK_SECRET)
+            prefs.remove(DeviceKeys.CACHED_PLAYBACK)
+        }
+    }
+
+    /**
+     * Server rejected playback authorization — show a new pairing code instead of a dead-end screen.
+     */
+    private suspend fun recoverPairingAfterPlaybackRejected() {
+        Log.w(LOG_TAG, "tv_get_playback_slides rejected; clearing local registration and showing pairing")
+        _state.value = MainUiState.Initializing
+        clearLocalDevicePairingKeys()
+        try {
+            createNewDeviceAndPoll()
+        } catch (t: Throwable) {
+            if (t is CancellationException) throw t
+            Log.e(LOG_TAG, "recoverPairingAfterPlaybackRejected failed; retrying full startup", t)
+            runStartupUntilConnected()
+        }
     }
 
     private suspend fun persistDeviceMetadata() {
@@ -299,6 +427,36 @@ class MainViewModel(
         }
     }
 
+    /**
+     * Keeps retrying [startRegistrationFlow] with backoff while the device cannot reach Supabase,
+     * instead of leaving the user on the connection error screen after transient outages.
+     */
+    private suspend fun runStartupUntilConnected() {
+        var backoffMs = STARTUP_RETRY_DELAY_INITIAL_MS
+        while (currentCoroutineContext().isActive) {
+            _state.value = MainUiState.Initializing
+            Log.i(LOG_TAG, "Starting registration flow...")
+            try {
+                startRegistrationFlow()
+                Log.i(LOG_TAG, "Registration flow completed successfully.")
+                return
+            } catch (t: Throwable) {
+                if (t is CancellationException) throw t
+                Log.e(
+                    LOG_TAG,
+                    "TvUserFacingError ${TvUserFacingError.STARTUP_FAILED} startRegistrationFlow (retry in ${backoffMs}ms): ${t.message}",
+                    t,
+                )
+                publishPlaybackUnavailableToCloud(TvUserFacingError.STARTUP_FAILED)
+                // If we failed during registration, ensure Exo is released to avoid keeping
+                // resources (or potential leaks) during the wait.
+                releaseSignageExo()
+                delay(backoffMs)
+                backoffMs = minOf(backoffMs * 2, STARTUP_RETRY_DELAY_MAX_MS)
+            }
+        }
+    }
+
     private suspend fun startRegistrationFlow() {
         // Wait until persisted GoTrue session is loaded. Calling signInAnonymously() before that replaces
         // the session and breaks access to the existing device (registered_session_id must match auth.uid()).
@@ -307,23 +465,34 @@ class MainViewModel(
             ensureAnonymousUserIdOrNull()
         }
 
-        val snapshot = dataStore.data.first()
+        val snapshot = withContext(Dispatchers.IO) { dataStore.data.first() }
         val storedDeviceId = snapshot[DeviceKeys.DEVICE_ID]
         val storedPairingCode = snapshot[DeviceKeys.PAIRING_CODE]
 
         if (storedDeviceId != null && storedPairingCode != null) {
             val registeredSnapshot = snapshot[DeviceKeys.REGISTERED_SESSION_ID]
             val currentUid = supabase.auth.currentUserOrNull()?.id
+            val storedPlaybackSecret = snapshot[DeviceKeys.PLAYBACK_SECRET]
             if (registeredSnapshot != null && currentUid != null && registeredSnapshot != currentUid) {
-                Log.w(
-                    LOG_TAG,
-                    "TvUserFacingError: stored registered_session_id does not match current user; clearing local registration",
-                )
-                dataStore.edit { prefs ->
-                    prefs.remove(DeviceKeys.DEVICE_ID)
-                    prefs.remove(DeviceKeys.PAIRING_CODE)
-                    prefs.remove(DeviceKeys.REGISTERED_SESSION_ID)
-                    prefs.remove(DeviceKeys.CACHED_PLAYBACK)
+                if (storedPlaybackSecret.isNullOrBlank()) {
+                    Log.w(
+                        LOG_TAG,
+                        "TvUserFacingError: stored registered_session_id does not match current user; clearing local registration",
+                    )
+                    dataStore.edit { prefs ->
+                        prefs.remove(DeviceKeys.DEVICE_ID)
+                        prefs.remove(DeviceKeys.PAIRING_CODE)
+                        prefs.remove(DeviceKeys.REGISTERED_SESSION_ID)
+                        prefs.remove(DeviceKeys.PLAYBACK_SECRET)
+                        prefs.remove(DeviceKeys.CACHED_PLAYBACK)
+                    }
+                } else {
+                    Log.w(
+                        LOG_TAG,
+                        "Anonymous session changed; resuming playback using stored playback secret",
+                    )
+                    startPlaybackObservation(storedDeviceId, "")
+                    return
                 }
             } else {
                 val visible = fetchDeviceRowWithRetry(storedDeviceId)
@@ -343,11 +512,20 @@ class MainViewModel(
                     pollUntilLinked(storedDeviceId)
                     return
                 }
+                if (!storedPlaybackSecret.isNullOrBlank()) {
+                    Log.w(
+                        LOG_TAG,
+                        "Device row not visible to this session; resuming with playback secret (linked screen)",
+                    )
+                    startPlaybackObservation(storedDeviceId, "")
+                    return
+                }
                 // Row not visible to this session (new anonymous user, cleared DB, etc.) — drop stale cache
                 dataStore.edit { prefs ->
                     prefs.remove(DeviceKeys.DEVICE_ID)
                     prefs.remove(DeviceKeys.PAIRING_CODE)
                     prefs.remove(DeviceKeys.REGISTERED_SESSION_ID)
+                    prefs.remove(DeviceKeys.PLAYBACK_SECRET)
                 }
             }
         }
@@ -443,9 +621,7 @@ class MainViewModel(
             ensureAnonymousUserIdOrNull()
                 ?: run {
                     Log.e(LOG_TAG, "TvUserFacingError ${TvUserFacingError.STARTUP_FAILED}: no Supabase user after anonymous sign-in")
-                    _state.value = MainUiState.Error(TvUserFacingError.STARTUP_FAILED)
-                    publishPlaybackUnavailableToCloud(TvUserFacingError.STARTUP_FAILED)
-                    return
+                    throw IllegalStateException("anonymous sign-in unavailable")
                 }
 
         val inserted =
@@ -462,6 +638,7 @@ class MainViewModel(
             }
 
         dataStore.edit { prefs ->
+            prefs.remove(DeviceKeys.PLAYBACK_SECRET)
             prefs[DeviceKeys.DEVICE_ID] = inserted.id
             prefs[DeviceKeys.PAIRING_CODE] = inserted.pairingCode
             val installId = Settings.Secure.getString(
@@ -480,7 +657,7 @@ class MainViewModel(
             MainUiState.AwaitingLink(
                 pairingCode = inserted.pairingCode,
                 deviceId = inserted.id,
-                message = "Waiting for the owner to link this screen…",
+                message = "Waiting for an admin to link this screen…",
             )
 
         startDeviceTelemetryLoop(inserted.id)
@@ -499,11 +676,7 @@ class MainViewModel(
 
             if (row == null) {
                 // No row: stale local id for this anon session, or device removed — register again
-                dataStore.edit { prefs ->
-                    prefs.remove(DeviceKeys.DEVICE_ID)
-                    prefs.remove(DeviceKeys.PAIRING_CODE)
-                    prefs.remove(DeviceKeys.REGISTERED_SESSION_ID)
-                }
+                clearLocalDevicePairingKeys()
                 createNewDeviceAndPoll()
                 return
             }
@@ -527,32 +700,64 @@ class MainViewModel(
         playbackObserveJob =
             viewModelScope.launch {
                 val cached = readCachedPlaybackOnly(deviceId)
+                var nameForPoll =
+                    when {
+                        deviceName.isNotBlank() -> deviceName
+                        cached != null -> cached.deviceName
+                        else -> ""
+                    }
                 if (cached != null) {
-                    _state.value = cached.copy(deviceName = deviceName, isFromCache = true)
+                    _state.value =
+                        cached.copy(
+                            deviceName = nameForPoll.ifBlank { cached.deviceName },
+                            isFromCache = true,
+                        )
                 }
                 while (isActive) {
                     try {
-                        _state.value = loadPlaybackState(deviceName, deviceId)
+                        when (val loaded = loadPlaybackState(nameForPoll, deviceId)) {
+                            is PlaybackLoadResult.NeedsRePairing -> {
+                                viewModelScope.launch {
+                                    recoverPairingAfterPlaybackRejected()
+                                }
+                                return@launch
+                            }
+                            is PlaybackLoadResult.Ok -> {
+                                val next = loaded.state
+                                nameForPoll = next.deviceName
+                                _state.value = next
+                            }
+                        }
                     } catch (e: Exception) {
                         Log.e(LOG_TAG, "loadPlaybackState failed", e)
                         val now = _state.value
-                        if (now is MainUiState.Playback && now.deviceId == deviceId && now.slides.isNotEmpty()) {
-                            // Keep last good manifest (includes disk cache) until the next poll succeeds.
+                        if (now is MainUiState.Playback &&
+                            now.deviceId == deviceId &&
+                            (now.slides.isNotEmpty() || now.playbackDisabledByAdmin)
+                        ) {
+                            // Keep last good manifest or admin standby until the next poll succeeds.
                         } else if (cached != null) {
-                            _state.value = cached.copy(deviceName = deviceName, isFromCache = true)
+                            _state.value =
+                                cached.copy(
+                                    deviceName = nameForPoll.ifBlank { cached.deviceName },
+                                    isFromCache = true,
+                                )
                         } else {
                             _state.value =
                                 MainUiState.Playback(
-                                    deviceName = deviceName,
+                                    deviceName = nameForPoll,
                                     deviceId = deviceId,
                                     playlistName = null,
                                     slides = emptyList(),
-                                    isRegistrationMismatch = false,
                                     screenOrientation = (now as? MainUiState.Playback)?.screenOrientation ?: "landscape",
+                                    playbackDisabledByAdmin = false,
                                 )
                         }
                     }
-                    delay(4_000)
+                    select {
+                        immediatePlaybackPoll.onReceive { }
+                        onTimeout(4_000) { }
+                    }
                 }
             }
     }
@@ -611,34 +816,61 @@ class MainViewModel(
     private suspend fun loadPlaybackState(
         deviceName: String,
         deviceId: String,
-    ): MainUiState.Playback {
+    ): PlaybackLoadResult = withContext(Dispatchers.IO) {
         val row = runCatching { fetchDeviceRow(deviceId) }.getOrNull()
         val screenOrientation =
             row?.screenOrientation?.trim()?.lowercase()?.takeIf { it == "portrait" || it == "landscape" }
+                ?: (_state.value as? MainUiState.Playback)?.takeIf { it.deviceId == deviceId }
+                    ?.screenOrientation?.trim()?.lowercase()?.takeIf { it == "portrait" || it == "landscape" }
                 ?: "landscape"
 
+        val storedPlaybackSecret = dataStore.data.first()[DeviceKeys.PLAYBACK_SECRET]
         val res =
-            supabase.postgrest.rpc("tv_get_playback_slides", TvGetPlaybackParams(pDeviceId = deviceId))
-                .decodeAs<TvGetPlaybackResult>()
+            supabase.postgrest.rpc(
+                "tv_get_playback_slides",
+                TvGetPlaybackParams(
+                    pDeviceId = deviceId,
+                    pPlaybackSecret = storedPlaybackSecret?.takeIf { it.isNotBlank() },
+                ),
+            ).decodeAs<TvGetPlaybackResult>()
         Log.d(
             LOG_TAG,
-            "tv_get_playback_slides ok=${res.ok} playlistName=${res.playlistName} slidesCount=${res.slides.size} rev=${res.contentRevision}",
+            "tv_get_playback_slides ok=${res.ok} playbackDisabled=${res.playbackDisabled} playlistName=${res.playlistName} slidesCount=${res.slides.size} rev=${res.contentRevision}",
         )
         if (res.ok) {
             lastContentRevision.set(res.contentRevision)
         }
+        if (!res.playbackSecret.isNullOrBlank()) {
+            dataStore.edit { prefs ->
+                prefs[DeviceKeys.PLAYBACK_SECRET] = res.playbackSecret!!
+            }
+        }
         if (!res.ok) {
             Log.w(
                 LOG_TAG,
-                "tv_get_playback_slides: this Supabase user is not the registering session for device $deviceId. Use Reset on the TV and link again, or re-pair.",
+                "tv_get_playback_slides rejected for device $deviceId (invalid session, secret, or device removed).",
             )
-            return MainUiState.Playback(
-                deviceName = deviceName,
-                deviceId = deviceId,
-                playlistName = null,
-                slides = emptyList(),
-                isRegistrationMismatch = true,
-                screenOrientation = screenOrientation,
+            return@withContext PlaybackLoadResult.NeedsRePairing
+        }
+        val resolvedDisplayName =
+            res.deviceName?.takeIf { it.isNotBlank() } ?: deviceName.ifBlank { "Display" }
+        val prevGen =
+            (_state.value as? MainUiState.Playback)?.takeIf { it.deviceId == deviceId }?.uiRefreshGeneration ?: 0L
+        if (res.playbackDisabled) {
+            clearCachedPlayback()
+            return@withContext PlaybackLoadResult.Ok(
+                MainUiState.Playback(
+                    deviceName = resolvedDisplayName,
+                    deviceId = deviceId,
+                    playlistName = null,
+                    slides = emptyList(),
+                    isFromCache = false,
+                    contentRevision = res.contentRevision,
+                    playlistId = null,
+                    screenOrientation = screenOrientation,
+                    playbackDisabledByAdmin = true,
+                    uiRefreshGeneration = prevGen,
+                ),
             )
         }
         val slides =
@@ -646,24 +878,29 @@ class MainViewModel(
                 PlaybackSlide(
                     url = publicMediaUrl(s.storagePath),
                     fileType = s.fileType,
-                    durationSeconds = s.durationSeconds,
+                    durationSeconds = if (s.fileType.equals("video", ignoreCase = true)) null else s.durationSeconds,
                 )
             }
         if (slides.isEmpty()) {
             clearCachedPlayback()
         } else {
-            runCatching { writeCachedPlayback(deviceId, res, slides, screenOrientation) }
+            runCatching {
+                writeCachedPlayback(deviceId, res, slides, screenOrientation, resolvedDisplayName)
+            }
         }
-        return MainUiState.Playback(
-            deviceName = deviceName,
-            deviceId = deviceId,
-            playlistName = res.playlistName,
-            slides = slides,
-            isRegistrationMismatch = false,
-            isFromCache = false,
-            contentRevision = res.contentRevision,
-            playlistId = res.playlistId,
-            screenOrientation = screenOrientation,
+        PlaybackLoadResult.Ok(
+            MainUiState.Playback(
+                deviceName = resolvedDisplayName,
+                deviceId = deviceId,
+                playlistName = res.playlistName,
+                slides = slides,
+                isFromCache = false,
+                contentRevision = res.contentRevision,
+                playlistId = res.playlistId,
+                screenOrientation = screenOrientation,
+                playbackDisabledByAdmin = false,
+                uiRefreshGeneration = prevGen,
+            ),
         )
     }
 
@@ -693,6 +930,7 @@ class MainViewModel(
                 dataStore.edit { prefs ->
                     prefs.remove(DeviceKeys.DEVICE_ID)
                     prefs.remove(DeviceKeys.PAIRING_CODE)
+                    prefs.remove(DeviceKeys.PLAYBACK_SECRET)
                     prefs.remove(DeviceKeys.REGISTERED_SESSION_ID)
                     prefs.remove(DeviceKeys.ANDROID_INSTALLATION_ID)
                     prefs.remove(DeviceKeys.CACHED_PLAYBACK)

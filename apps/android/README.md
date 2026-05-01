@@ -15,7 +15,7 @@ Open this folder in Android Studio and run on an Android TV / emulator with a la
 ## MVP behavior
 
 - On first launch the app signs in **anonymously**, generates a **six-digit pairing code**, inserts a `devices` row (`registered_session_id` = anonymous user id), and shows the code full-screen.
-- It polls the `devices` row until `owner_id` is populated from the web dashboard (`link_device_by_pairing_code` RPC path).
+- It polls the `devices` row until an admin links it from the web dashboard (`owner_id` set via `link_device_by_pairing_code`).
 - Use **Reset registration** during development to clear local pairing state.
 
 ## Next steps (not fully wired in this scaffold)

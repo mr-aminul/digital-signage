@@ -23,8 +23,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useConsoleSync } from "@/components/console/console-sync-provider";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { formatPlaylistClockLabel } from "@/lib/playlist-timing";
 import { cn } from "@/lib/utils";
 import { PlaylistPreviewButton } from "@/components/playlist-preview";
+import { ReadonlyVideoDuration } from "@/components/readonly-video-duration";
 import { useConsoleDataStore } from "@/stores/console-data-store";
 
 const EMPTY_PLAYLIST_ITEMS: PlaylistItemWithMedia[] = [];
@@ -38,16 +40,9 @@ function reorder<T>(list: T[], startIndex: number, endIndex: number): T[] {
 }
 
 function mediaUrl(publicBaseUrl: string, storagePath: string) {
-  return `${publicBaseUrl}/storage/v1/object/public/media/${storagePath}`;
-}
-
-function formatDurationShort(totalSec: number): string {
-  const s = Math.max(0, Math.round(totalSec));
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  const rem = s % 60;
-  if (rem === 0) return `${m}m`;
-  return `${m}m ${rem}s`;
+  const base = publicBaseUrl.replace(/\/$/, "");
+  const path = storagePath.split("/").map(encodeURIComponent).join("/");
+  return `${base}/storage/v1/object/public/media/${path}`;
 }
 
 function LibraryThumb({ media, publicBaseUrl }: { media: Media; publicBaseUrl: string }) {
@@ -115,10 +110,7 @@ export function PlaylistEditor({ playlistId, initialName, publicBaseUrl }: Playl
     await syncNow();
   }, [syncNow]);
 
-  const totalSeconds = useMemo(
-    () => items.reduce((acc, row) => acc + (row.duration_seconds ?? 10), 0),
-    [items],
-  );
+  const playlistTimingLabel = useMemo(() => formatPlaylistClockLabel(items), [items]);
 
   const filteredLibrary = useMemo(() => {
     const q = librarySearch.trim().toLowerCase();
@@ -167,13 +159,14 @@ export function PlaylistEditor({ playlistId, initialName, publicBaseUrl }: Playl
   const addMediaAtIndex = useCallback(
     async (mediaId: string, destIndex: number) => {
       const sortLen = useConsoleDataStore.getState().playlistItemsByPlaylistId[playlistId]?.length ?? 0;
+      const mediaRow = allMedia.find((m) => m.id === mediaId);
       const { data: row, error } = await supabase
         .from("playlist_items")
         .insert({
           playlist_id: playlistId,
           media_id: mediaId,
           sort_order: sortLen,
-          duration_seconds: 10,
+          duration_seconds: mediaRow?.file_type === "video" ? null : 10,
         })
         .select("id")
         .single();
@@ -193,7 +186,7 @@ export function PlaylistEditor({ playlistId, initialName, publicBaseUrl }: Playl
         setItems(fresh);
       }
     },
-    [persistOrder, playlistId, reloadFromServer, supabase],
+    [allMedia, persistOrder, playlistId, reloadFromServer, supabase],
   );
 
   const removeItem = useCallback(
@@ -326,7 +319,7 @@ export function PlaylistEditor({ playlistId, initialName, publicBaseUrl }: Playl
                   </span>
                   <span className="inline-flex items-center gap-1 rounded-full border border-border bg-white px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm dark:bg-card">
                     <Clock className="h-3.5 w-3.5" />
-                    {formatDurationShort(totalSeconds)}
+                    {playlistTimingLabel}
                   </span>
                   <PlaylistPreviewButton items={items} playlistName={name} publicBaseUrl={publicBaseUrl} />
                   <Link
@@ -415,29 +408,33 @@ export function PlaylistEditor({ playlistId, initialName, publicBaseUrl }: Playl
                                     <span className="text-xs capitalize">{item.media.file_type}</span>
                                   </div>
                                   <div>
-                                    <Label className="sr-only" htmlFor={`duration-${item.id}`}>
-                                      {item.media.file_type === "video"
-                                        ? "Max on-screen (seconds, empty = full video length)"
-                                        : "Duration (seconds)"}
-                                    </Label>
-                                    <Input
-                                      id={`duration-${item.id}`}
-                                      type="number"
-                                      min={1}
-                                      className="h-9 w-full min-w-0 text-sm tabular-nums"
-                                      key={`d-${item.id}-${item.duration_seconds}`}
-                                      defaultValue={item.duration_seconds ?? 10}
-                                      onBlur={(e) => {
-                                        const raw = e.target.value.trim();
-                                        if (raw === "" && item.media.file_type === "video") {
-                                          void updateDuration(item.id, null);
-                                          return;
-                                        }
-                                        const value = Number(e.target.value);
-                                        const nextValue = Number.isFinite(value) && value > 0 ? value : null;
-                                        void updateDuration(item.id, nextValue);
-                                      }}
-                                    />
+                                    {item.media.file_type === "video" ? (
+                                      <ReadonlyVideoDuration
+                                        id={`duration-video-${item.id}`}
+                                        durationSeconds={item.media.duration_seconds}
+                                        fallbackProbeUrl={mediaUrl(publicBaseUrl, item.media.storage_path)}
+                                      />
+                                    ) : (
+                                      <>
+                                        <Label className="sr-only" htmlFor={`duration-${item.id}`}>
+                                          Duration (seconds)
+                                        </Label>
+                                        <Input
+                                          id={`duration-${item.id}`}
+                                          type="number"
+                                          min={1}
+                                          className="h-9 w-full min-w-0 text-sm tabular-nums"
+                                          key={`d-${item.id}-${item.duration_seconds}`}
+                                          defaultValue={item.duration_seconds ?? 10}
+                                          onBlur={(e) => {
+                                            const raw = e.target.value.trim();
+                                            const value = Number(raw);
+                                            const nextValue = Number.isFinite(value) && value > 0 ? value : null;
+                                            void updateDuration(item.id, nextValue);
+                                          }}
+                                        />
+                                      </>
+                                    )}
                                   </div>
                                   <div className="flex justify-end">
                                     <Button
@@ -452,12 +449,6 @@ export function PlaylistEditor({ playlistId, initialName, publicBaseUrl }: Playl
                                     </Button>
                                   </div>
                                 </div>
-                                {item.media.file_type === "video" && (
-                                  <p className="ml-5 mt-1 text-[0.7rem] leading-tight text-muted-foreground sm:ml-12">
-                                    Max seconds caps how long the video shows on the TV. Leave empty to play the full
-                                    file once, or shorter than the file to end early.
-                                  </p>
-                                )}
                               </div>
                             )}
                           </Draggable>

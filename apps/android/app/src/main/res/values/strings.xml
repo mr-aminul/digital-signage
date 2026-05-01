@@ -1,3 +1,19 @@
 <resources>
     <string name="app_name">Signage TV</string>
+    <string name="device_disabled_by_admin">Device disabled by admin</string>
+    <string name="standby_no_playlist">No playlist assigned yet.</string>
+    <string name="standby_no_playlist_hint">Assign one to this display in the web app.</string>
+    <string name="standby_playlist_empty">This playlist has nothing to show yet.</string>
+    <string name="standby_playlist_empty_hint">Add slides in the web app — this screen updates on its own.</string>
+    <string name="slide_load_failed">Can\'t show this slide.</string>
+    <string name="slide_load_skipping">Continuing in a moment.</string>
+    <string name="loading_slide">Loading…</string>
+    <string name="startup_loading">Starting…</string>
+    <string name="setup_config_needed">This app needs configuration before it can run.</string>
+    <string name="setup_config_hint">Add supabase.url and supabase.anon.key to local.properties, sync Gradle, rebuild, and enable anonymous sign-in in Supabase.</string>
+    <string name="error_connection_title">Can\'t reach the service right now.</string>
+    <string name="error_connection_hint">Check the network. If this keeps happening, contact support with the time this appeared.</string>
+    <string name="error_relaunch_title">Pairing was cleared.</string>
+    <string name="error_relaunch_hint">Close and reopen this app, then enter a new pairing code from the web app.</string>
+    <string name="button_reset_registration">Reset registration</string>
 </resources>

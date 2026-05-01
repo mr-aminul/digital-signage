@@ -33,7 +33,7 @@ export default function PlaylistsPage() {
       </div>
       <h1 className="text-xl font-semibold tracking-tight text-foreground">Playlist workspace</h1>
       <p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
-        Build loops of images and video, set per-clip duration, then assign playlists to screens. Use the sidebar to open a
+        Build loops of images and video, set how long each image shows (videos always play in full), then assign playlists to screens. Use the sidebar to open a
         playlist or create a new one.
       </p>
       {latestPlaylist ? (

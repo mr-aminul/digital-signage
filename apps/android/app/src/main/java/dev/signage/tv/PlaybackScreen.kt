@@ -8,12 +8,15 @@ import androidx.activity.ComponentActivity
 import androidx.annotation.OptIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -27,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -44,29 +48,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 private const val LOG_TAG = "SignageTV"
 
 @Composable
-private fun MismatchOrEmptyScreen(
-    userMessage: String,
-    code: String,
-) {
-    Box(
-        modifier = Modifier.fillMaxSize().padding(32.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = userMessage,
-                style = MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Center,
-            )
-            Text(
-                text = "Error code: $code",
-                modifier = Modifier.padding(top = 16.dp),
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.primary,
-                textAlign = TextAlign.Center,
-            )
-        }
-    }
+private fun AdminDisabledStandbyScreen() {
+    TvStandbyBrandingScreen(message = stringResource(R.string.device_disabled_by_admin))
 }
 
 @OptIn(UnstableApi::class)
@@ -85,31 +68,30 @@ fun PlaybackScreen(
             }
     }
 
-    if (state.isRegistrationMismatch) {
-        MismatchOrEmptyScreen(
-            userMessage =
-                "This screen is no longer linked. On the TV: choose Reset, then add the new pairing code in the web app.",
-            code = TvUserFacingError.LINK_LOST,
-        )
+    if (state.playbackDisabledByAdmin) {
+        AdminDisabledStandbyScreen()
         return
     }
     if (state.slides.isEmpty()) {
-        MismatchOrEmptyScreen(
-            userMessage =
-                if (state.playlistName == null) {
-                    "No playlist to show. Assign a playlist to this display in the web app."
-                } else {
-                    "The active playlist is empty. Add content in the web app, and this display will update shortly."
-                },
-            code = if (state.playlistName == null) TvUserFacingError.NO_PLAYLIST else TvUserFacingError.EMPTY_PLAYLIST,
-        )
+        if (state.playlistName == null) {
+            TvStandbyBrandingScreen(
+                message = stringResource(R.string.standby_no_playlist),
+                hint = stringResource(R.string.standby_no_playlist_hint),
+            )
+        } else {
+            TvStandbyBrandingScreen(
+                message = stringResource(R.string.standby_playlist_empty),
+                hint = stringResource(R.string.standby_playlist_empty_hint),
+            )
+        }
         return
     }
 
     val engine = remember { viewModel.exoForPlayback() }
+    val recoveryEpoch by viewModel.playbackUiRecoveryEpoch.collectAsState()
     val slideKey =
         state.slides.joinToString("|") { s ->
-            "${s.url}#${s.fileType}#${s.durationSeconds}#${state.contentRevision}#${state.isFromCache}"
+            "${s.url}#${s.fileType}#${s.durationSeconds}#${state.contentRevision}#${state.isFromCache}#${state.uiRefreshGeneration}"
         }
     var index by remember(slideKey) { mutableIntStateOf(0) }
     var visit by remember(slideKey) { mutableIntStateOf(0) }
@@ -130,15 +112,14 @@ fun PlaybackScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         when (slide.fileType) {
             "video" -> {
-                val maxSec = slide.durationSeconds
-                key(visit, slide.url, maxSec) {
+                key(visit, slide.url, recoveryEpoch, state.uiRefreshGeneration) {
                     val onEnded: () -> Unit = {
                         index = (index + 1) % n
                         visit += 1
                     }
                     SharedExoVideoSlide(
                         url = slide.url,
-                        maxDurationSeconds = maxSec,
+                        maxDurationSeconds = null,
                         holdImageUrl = holdImageUrlForVideo,
                         onEnded = onEnded,
                         engine = engine,
@@ -152,6 +133,8 @@ fun PlaybackScreen(
                 ImageSlide(
                     url = slide.url,
                     durationSeconds = slide.durationSeconds,
+                    recoveryEpoch = recoveryEpoch,
+                    uiRefreshGeneration = state.uiRefreshGeneration,
                     onDone = {
                         index = (index + 1) % n
                         visit += 1
@@ -264,6 +247,8 @@ private fun HoldUnderImageFullBleed(url: String) {
 private fun ImageSlide(
     url: String,
     durationSeconds: Int?,
+    recoveryEpoch: Long,
+    uiRefreshGeneration: Long,
     onDone: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -286,7 +271,7 @@ private fun ImageSlide(
         modifier = Modifier.fillMaxSize(),
         contentScale = ContentScale.Crop,
     ) {
-        LaunchedEffect(url, dwellMs) {
+        LaunchedEffect(url, dwellMs, recoveryEpoch, uiRefreshGeneration) {
             val settled =
                 withTimeoutOrNull(120_000) {
                     snapshotFlow { painter.state }.first {
@@ -305,12 +290,21 @@ private fun ImageSlide(
             is AsyncImagePainter.State.Error -> {
                 Log.e(LOG_TAG, "Slide image load failed: $url", s.result.throwable)
                 Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = "This slide could not be shown. Error code: ${TvUserFacingError.SLIDE_LOAD}",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        textAlign = TextAlign.Center,
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = stringResource(R.string.slide_load_failed),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.92f),
+                            textAlign = TextAlign.Center,
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.slide_load_skipping),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.72f),
+                            textAlign = TextAlign.Center,
+                        )
+                    }
                 }
             }
             is AsyncImagePainter.State.Loading,
@@ -318,7 +312,7 @@ private fun ImageSlide(
             -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
-                        text = "Loading…",
+                        text = stringResource(R.string.loading_slide),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onBackground,
                     )

@@ -31,6 +31,8 @@ export interface Device {
   telemetry?: DeviceTelemetry | null;
   /** When `telemetry` was last written. */
   telemetry_at?: string | null;
+  /** When true, the TV shows standby branding instead of the assigned playlist. */
+  playback_disabled?: boolean;
 }
 
 export interface Media {
@@ -40,6 +42,8 @@ export interface Media {
   file_type: MediaFileType;
   original_filename: string | null;
   created_at: string;
+  /** Video intrinsic length in seconds; null for images or not yet probed. */
+  duration_seconds?: number | null;
 }
 
 export interface Playlist {
@@ -54,7 +58,7 @@ export interface PlaylistItem {
   playlist_id: string;
   media_id: string;
   sort_order: number;
-  /** Max on-screen time for this item (s). For video, null = play to natural end. */
+  /** Image dwell time in seconds; ignored for video (always plays to completion). */
   duration_seconds: number | null;
   display_from: string | null;
   display_until: string | null;
@@ -71,5 +75,5 @@ export interface DevicePlaylist {
 
 /** Payload used by the playlist editor (joins media metadata). */
 export interface PlaylistItemWithMedia extends PlaylistItem {
-  media: Pick<Media, "id" | "storage_path" | "file_type" | "original_filename">;
+  media: Pick<Media, "id" | "storage_path" | "file_type" | "original_filename" | "duration_seconds">;
 }

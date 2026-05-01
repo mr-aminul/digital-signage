@@ -11,18 +11,10 @@ import { useConsoleSync } from "@/components/console/console-sync-provider";
 import { CreatePlaylistForm } from "@/components/create-playlist-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { formatPlaylistClockLabel } from "@/lib/playlist-timing";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { useConsoleDataStore } from "@/stores/console-data-store";
-
-function formatDurationShort(totalSec: number): string {
-  const s = Math.max(0, Math.round(totalSec));
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  const rem = s % 60;
-  if (rem === 0) return `${m}m`;
-  return `${m}m ${rem}s`;
-}
 
 export function PlaylistsWorkspace({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -138,7 +130,7 @@ export function PlaylistsWorkspace({ children }: { children: React.ReactNode }) 
               <ul className="space-y-1">
                 {filtered.map((p) => {
                   const items = playlistItemsByPlaylistId[p.id] ?? [];
-                  const totalSec = items.reduce((acc, row) => acc + (row.duration_seconds ?? 10), 0);
+                  const timingLabel = formatPlaylistClockLabel(items);
                   const isActive = activePlaylistId === p.id;
                   return (
                     <li key={p.id} className="group flex items-stretch gap-1">
@@ -161,7 +153,7 @@ export function PlaylistsWorkspace({ children }: { children: React.ReactNode }) 
                         <ListVideo className="h-4 w-4 shrink-0 opacity-70" />
                         <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
                         <span className="shrink-0 tabular-nums text-[0.625rem] text-muted-foreground">
-                          {items.length} · {formatDurationShort(totalSec)}
+                          {items.length} · {timingLabel}
                         </span>
                       </Link>
                       <Button

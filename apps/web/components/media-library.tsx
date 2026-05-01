@@ -8,7 +8,7 @@ import { useDropzone } from "react-dropzone";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { inferMediaFileType, isAcceptedSignageMime } from "@/lib/media";
+import { inferMediaFileType, isAcceptedSignageMime, readVideoFileDurationSeconds } from "@/lib/media";
 import { useConsoleSync } from "@/components/console/console-sync-provider";
 import { cn } from "@/lib/utils";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -75,11 +75,15 @@ export function MediaLibrary({ userId, publicBaseUrl }: MediaLibraryProps) {
             toast.error(uploadError.message);
             continue;
           }
+          const fileType = inferMediaFileType(file.type);
+          const intrinsicSeconds =
+            fileType === "video" ? await readVideoFileDurationSeconds(file) : null;
           const { error: insertError } = await supabase.from("media").insert({
             owner_id: userId,
             storage_path: objectPath,
-            file_type: inferMediaFileType(file.type),
+            file_type: fileType,
             original_filename: file.name,
+            duration_seconds: intrinsicSeconds,
           });
           if (insertError) {
             toast.error(insertError.message);

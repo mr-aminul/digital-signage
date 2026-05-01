@@ -6,6 +6,8 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class CachedPlaybackV1(
     val deviceId: String,
+    /** Device display name from server manifest; older caches omit this key. */
+    val deviceDisplayName: String = "",
     val playlistName: String? = null,
     val contentRevision: String? = null,
     val playlistId: String? = null,
