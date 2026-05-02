@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -225,8 +226,9 @@ fun PlaybackScreen(
                 }
             }
             else -> {
-                LaunchedEffect(index, slide.url) {
+                DisposableEffect(index, slide.url) {
                     engine.onPlayerViewDetached()
+                    onDispose { }
                 }
                 ImageSlide(
                     url = slide.url,
@@ -275,7 +277,13 @@ private fun SharedExoVideoSlide(
                 view.player = engine.exo
                 view
             },
-            onRelease = { v -> (v as PlayerView).player = null },
+            onRelease = { v ->
+                val pv = v as PlayerView
+                pv.player = null
+                // PlayerView detach alone does not stop the shared ExoPlayer; audio would keep playing
+                // until the next slide's effect runs (too late after standby/app switches).
+                engine.onPlayerViewDetached()
+            },
             update = { v ->
                 val view = v as PlayerView
                 if (view.player == null) {

@@ -348,7 +348,9 @@ class SignageExoController(
             }
             startStallWatchdog()
         } else {
-            exo.playWhenReady = true
+            // No active video binding (e.g. image slide). Leaving playWhenReady true can resume stale
+            // buffered audio after display wake if media were not fully cleared yet.
+            exo.playWhenReady = false
         }
     }
 
@@ -401,6 +403,7 @@ class SignageExoController(
         firstFrameListener = null
         playbackListener?.let { exo.removeListener(it) }
         playbackListener = null
+        exo.setVolume(0f)
         exo.stop()
         exo.setPlayWhenReady(false)
         exo.clearMediaItems()
