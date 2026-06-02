@@ -183,7 +183,12 @@ export function LoginForm() {
       router.replace(next);
       router.refresh();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Sign-in failed";
+      const message =
+        err instanceof Error
+          ? err.message.includes("Missing Supabase")
+            ? "App is not configured for sign-in. Contact your administrator."
+            : err.message
+          : "Sign-in failed";
       setError(message);
       toast.error(message);
     } finally {

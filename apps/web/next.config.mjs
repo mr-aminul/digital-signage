@@ -1,5 +1,14 @@
 /** @type {import('next').NextConfig} */
+const supabaseUrl =
+  process.env.SUPABASE_URL?.trim() || process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+const supabaseAnonKey =
+  process.env.SUPABASE_ANON_KEY?.trim() || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+
 const nextConfig = {
+  env: {
+    NEXT_PUBLIC_SUPABASE_URL: supabaseUrl ?? "",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: supabaseAnonKey ?? "",
+  },
   reactStrictMode: true,
   transpilePackages: ["@signage/types"],
   experimental: {
