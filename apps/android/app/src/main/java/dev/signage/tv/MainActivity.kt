@@ -29,6 +29,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
@@ -38,6 +39,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
+import dev.signage.tv.ui.AppUpdateOverlay
 import dev.signage.tv.ui.SignageBrandHeaderTv
 import dev.signage.tv.ui.SignageBrandMark
 import dev.signage.tv.ui.SignageShellBackground
@@ -87,8 +89,15 @@ class MainActivity : ComponentActivity() {
         setContent {
             SignageTvTheme {
                 val state by viewModel.state.collectAsState()
-                SignageShellBackground {
-                    when (val ui = state) {
+                val updateState by viewModel.appUpdateState.collectAsState()
+                LaunchedEffect(updateState) {
+                    if (updateState is AppUpdateState.ReadyToInstall) {
+                        viewModel.installPendingUpdate(this@MainActivity)
+                    }
+                }
+                Box(modifier = Modifier.fillMaxSize()) {
+                    SignageShellBackground {
+                        when (val ui = state) {
                         MainUiState.Initializing ->
                             TvLoadingScreen(message = stringResource(R.string.startup_loading))
 
@@ -135,7 +144,12 @@ class MainActivity : ComponentActivity() {
                         is MainUiState.AwaitingLink -> PairingScreen(ui)
 
                         is MainUiState.Playback -> PlaybackScreen(state = ui, viewModel = viewModel)
+                        }
                     }
+                    AppUpdateOverlay(
+                        state = updateState,
+                        onInstallClick = { viewModel.installPendingUpdate(this@MainActivity) },
+                    )
                 }
             }
         }
@@ -205,6 +219,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         viewModel.onPlaybackForegroundEvent()
+        viewModel.onActivityResumedForUpdate(this)
     }
 
     override fun onPause() {

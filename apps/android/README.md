@@ -38,6 +38,19 @@ Verify: `adb shell ping -c 1 nlkjbfwhzzpebsunmzrw.supabase.co` should resolve.
 
 `release` has **R8 minification** enabled. After dependency upgrades, verify `./gradlew :app:assembleRelease` and smoke-test pairing + image + video on a real device.
 
+Sign every release with the **same keystore** — Android only allows in-place upgrades when the signing certificate matches. Bump `versionCode` in `app/build.gradle.kts` on every publish.
+
+## In-app OTA (sideloaded fleets)
+
+Paired TVs poll Supabase for a newer active build (`00026_app_releases.sql`), download the APK from the public `releases` storage bucket, verify SHA-256, and launch the system installer.
+
+1. Apply migration `packages/database/migrations/00026_app_releases.sql`.
+2. Build a signed release APK: `./gradlew :app:assembleRelease`
+3. In the web console → **Settings** → **TV app updates (OTA)**, upload the APK with matching `versionCode` / `versionName` and click **Publish and activate**.
+4. On each TV, allow **Install unknown apps** for OneSign TV once (Android 8+). The app re-checks every ~6 hours and on cold start.
+
+Device telemetry already reports installed `version_code` so you can spot stragglers in the dashboard.
+
 ## MVP behavior
 
 - On first launch the app signs in **anonymously**, generates a **six-digit pairing code**, inserts a `devices` row (`registered_session_id` = anonymous user id), and shows the code full-screen.

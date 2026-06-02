@@ -35,6 +35,19 @@ export interface Device {
   playback_disabled?: boolean;
 }
 
+export interface AppRelease {
+  id: string;
+  version_code: number;
+  version_name: string;
+  storage_path: string;
+  sha256: string;
+  release_notes: string | null;
+  is_active: boolean;
+  package_name: string;
+  created_at: string;
+  created_by: string | null;
+}
+
 export interface Media {
   id: string;
   owner_id: string;

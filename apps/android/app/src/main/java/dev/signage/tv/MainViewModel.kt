@@ -5,6 +5,7 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import androidx.annotation.OptIn
+import androidx.activity.ComponentActivity
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -298,6 +299,9 @@ class MainViewModel(
     private val _state = MutableStateFlow<MainUiState>(MainUiState.Initializing)
     val state: StateFlow<MainUiState> = _state.asStateFlow()
 
+    private val appUpdateCoordinator = AppUpdateCoordinator(application)
+    val appUpdateState: StateFlow<AppUpdateState> = appUpdateCoordinator.state
+
     init {
         if (BuildConfig.SUPABASE_URL.isBlank() || BuildConfig.SUPABASE_ANON_KEY.isBlank()) {
             Log.e(LOG_TAG, "TvUserFacingError ${TvUserFacingError.CONFIG_INCOMPLETE}: SUPABASE_URL or SUPABASE_ANON_KEY is blank in build")
@@ -305,9 +309,29 @@ class MainViewModel(
         } else {
             ProcessLifecycleOwner.get().lifecycle.addObserver(playbackProcessLifecycleObserver)
             viewModelScope.launch {
+                appUpdateCoordinator.runUpdateLoop(supabase) {
+                    supabase.auth.awaitInitialization()
+                }
+            }
+            viewModelScope.launch {
                 runStartupUntilConnected()
             }
         }
+    }
+
+    fun onActivityResumedForUpdate(activity: ComponentActivity) {
+        when (appUpdateCoordinator.state.value) {
+            is AppUpdateState.ReadyToInstall,
+            is AppUpdateState.AwaitingUserApproval,
+            -> viewModelScope.launch {
+                appUpdateCoordinator.retryInstall(activity)
+            }
+            else -> Unit
+        }
+    }
+
+    fun installPendingUpdate(activity: ComponentActivity) {
+        appUpdateCoordinator.launchInstallIntent(activity)
     }
 
     /** Slide advanced, video time advanced, image dwell tick, etc. — resets stale watchdog. */

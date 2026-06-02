@@ -1,13 +1,19 @@
 "use client";
 
+import { AppReleasesManager } from "@/components/app-releases-manager";
 import { useSettings } from "@/components/shell/settings-context";
+import { useConsoleDataStore } from "@/stores/console-data-store";
 
 export default function SettingsPage() {
   const { settings, setNotifications, setLanguage } = useSettings();
+  const ownerId = useConsoleDataStore((s) => s.ownerId);
 
   return (
-    <div style={{ padding: "0.25rem 0", maxWidth: "36rem" }}>
+    <div style={{ padding: "0.25rem 0", maxWidth: "42rem" }}>
       <h1 style={{ margin: "0 0 0.5rem", fontSize: "1.125rem", fontWeight: 700, color: "#111827" }}>Settings</h1>
+
+      {ownerId ? <AppReleasesManager userId={ownerId} /> : null}
+
       <section style={{ marginBottom: "1.75rem", paddingBottom: "1.75rem", borderBottom: "1px solid #e5e7eb" }}>
         <p style={{ margin: "0 0 0.75rem", fontSize: "0.875rem", color: "#4b5563" }}>
           Show in-app notifications and updates.

@@ -21,4 +21,13 @@
     <string name="error_relaunch_hint">Close and reopen this app, then enter a new pairing code from the web app.</string>
     <string name="button_reset_registration">Reset registration</string>
     <string name="button_try_again">Try again</string>
+    <string name="update_downloading">Downloading update %1$s…</string>
+    <string name="update_downloading_indeterminate">Downloading update…</string>
+    <string name="update_ready_title">Update %1$s is ready</string>
+    <string name="update_ready_hint">The installer will open on this TV. Confirm when prompted to finish the update.</string>
+    <string name="update_install_now">Install now</string>
+    <string name="update_awaiting_title">Finish installing %1$s</string>
+    <string name="update_awaiting_hint">Allow installs from this app if asked, then confirm the system install prompt.</string>
+    <string name="update_continue_install">Continue install</string>
+    <string name="update_error_title">Update failed</string>
 </resources>
