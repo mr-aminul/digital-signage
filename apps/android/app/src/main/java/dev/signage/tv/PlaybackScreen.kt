@@ -38,6 +38,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import dev.signage.tv.ui.SignageBrandMark
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
@@ -245,6 +246,17 @@ fun PlaybackScreen(
                 )
             }
         }
+
+        // TEMP: OTA test watermark — remove after verifying update delivery.
+        SignageBrandMark(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(24.dp),
+            boxWidth = 56.dp,
+            boxHeight = 52.dp,
+            cornerRadius = 8.dp,
+            iconSize = 30.dp,
+        )
     }
 }
 
