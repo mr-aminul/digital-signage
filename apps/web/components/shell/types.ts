@@ -25,6 +25,8 @@ export interface BrandConfig {
 
 export interface AppLayoutConfig {
   navItems: NavItem[];
+  /** Optional extra nav link rendered after primary items (e.g. settings). */
+  bottomNavItem?: NavItem;
   brand: BrandConfig;
   getPageTitle?: (pathname: string) => string;
   fullScreenPaths?: string[];
