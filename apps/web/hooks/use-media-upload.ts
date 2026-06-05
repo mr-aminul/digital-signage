@@ -1,11 +1,10 @@
 "use client";
 
 import type { Media } from "@signage/types";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { toast } from "sonner";
 import { useConsoleSync } from "@/components/console/console-sync-provider";
-import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { MEDIA_UPLOAD_ACCEPT, uploadMediaFiles } from "@/lib/upload-media";
 
 export function useMediaUpload(
@@ -16,7 +15,6 @@ export function useMediaUpload(
     withDropzone?: boolean;
   },
 ) {
-  const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const { syncNow } = useConsoleSync();
   const [uploading, setUploading] = useState(false);
   const onComplete = options?.onComplete;
@@ -24,9 +22,13 @@ export function useMediaUpload(
   const uploadFiles = useCallback(
     async (files: File[]): Promise<Media[]> => {
       if (files.length === 0) return [];
+      if (!ownerId) {
+        toast.error("Missing owner id.");
+        return [];
+      }
       setUploading(true);
       try {
-        const { uploaded, errors } = await uploadMediaFiles(supabase, ownerId, files);
+        const { uploaded, errors } = await uploadMediaFiles(files);
         for (const message of errors) {
           toast.error(message);
         }
@@ -46,7 +48,7 @@ export function useMediaUpload(
         setUploading(false);
       }
     },
-    [onComplete, ownerId, supabase, syncNow],
+    [onComplete, ownerId, syncNow],
   );
 
   const withDropzone = options?.withDropzone !== false;

@@ -20,6 +20,28 @@ const supabaseUrl =
   process.env.SUPABASE_URL?.trim() ||
   process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
 
+function hostnameFromPublicBaseUrl(raw) {
+  try {
+    const trimmed = raw?.trim();
+    if (!trimmed) return undefined;
+    return new URL(trimmed).hostname;
+  } catch {
+    return undefined;
+  }
+}
+
+const mediaStorageHost = hostnameFromPublicBaseUrl(process.env.NEXT_PUBLIC_MEDIA_BASE_URL);
+const releasesStorageHost = hostnameFromPublicBaseUrl(process.env.NEXT_PUBLIC_RELEASES_BASE_URL);
+
+const objectStorageRemotePatterns = [];
+for (const hostname of new Set([mediaStorageHost, releasesStorageHost].filter(Boolean))) {
+  objectStorageRemotePatterns.push({
+    protocol: "https",
+    hostname,
+    pathname: "/**",
+  });
+}
+
 const nextConfig = {
   env: {
     NEXT_PUBLIC_SUPABASE_URL: supabaseUrl ?? "",
@@ -29,7 +51,6 @@ const nextConfig = {
   transpilePackages: ["@signage/types"],
   experimental: {
     optimizePackageImports: ["lucide-react"],
-    // Reuse recent RSC payloads on client navigations (softens repeat clicks between pages).
     staleTimes: {
       dynamic: 30,
       static: 180,
@@ -37,6 +58,7 @@ const nextConfig = {
   },
   images: {
     remotePatterns: [
+      ...objectStorageRemotePatterns,
       {
         protocol: "https",
         hostname: "**.supabase.co",

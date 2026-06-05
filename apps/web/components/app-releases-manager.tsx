@@ -5,6 +5,7 @@ import { CheckCircle2, Download, History, Package } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { buttonVariants } from "@/components/ui/button";
+import { getReleasesPublicBaseUrl, releasePublicUrl } from "@/lib/object-storage/urls";
 import { cn } from "@/lib/utils";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -18,15 +19,6 @@ function formatReleaseDate(iso: string): string {
   });
 }
 
-function releaseApkPublicUrl(publicBaseUrl: string, storagePath: string): string {
-  const base = publicBaseUrl.replace(/\/$/, "");
-  const path = storagePath
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
-  return `${base}/storage/v1/object/public/releases/${path}`;
-}
-
 function releaseApkDownloadName(release: AppRelease): string {
   const safeVersion = release.version_name.replace(/[^\w.-]+/g, "-");
   return `onesign-tv-v${safeVersion}.apk`;
@@ -34,13 +26,13 @@ function releaseApkDownloadName(release: AppRelease): string {
 
 function ReleaseRow({
   release,
-  publicBaseUrl,
   showDownload,
 }: {
   release: AppRelease;
-  publicBaseUrl: string;
   showDownload?: boolean;
 }) {
+  const releasesBaseUrl = getReleasesPublicBaseUrl();
+
   return (
     <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0 space-y-1">
@@ -61,10 +53,10 @@ function ReleaseRow({
           <p className="text-sm text-muted-foreground">{release.release_notes}</p>
         ) : null}
       </div>
-      {showDownload && release.is_active && publicBaseUrl ? (
+      {showDownload && release.is_active && releasesBaseUrl ? (
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <a
-            href={releaseApkPublicUrl(publicBaseUrl, release.storage_path)}
+            href={releasePublicUrl(release.storage_path)}
             download={releaseApkDownloadName(release)}
             className={cn(buttonVariants({ variant: "default", size: "sm" }), "gap-1.5")}
           >
@@ -78,7 +70,6 @@ function ReleaseRow({
 }
 
 export function AppReleasesManager() {
-  const publicBaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const [releases, setReleases] = useState<AppRelease[]>([]);
   const [loading, setLoading] = useState(true);
@@ -126,7 +117,7 @@ export function AppReleasesManager() {
         {loading ? (
           <div className="px-4 py-6 text-sm text-muted-foreground">Loading…</div>
         ) : activeRelease ? (
-          <ReleaseRow release={activeRelease} publicBaseUrl={publicBaseUrl} showDownload />
+          <ReleaseRow release={activeRelease} showDownload />
         ) : (
           <div className="px-4 py-6 text-sm text-muted-foreground">No active release configured.</div>
         )}
@@ -148,7 +139,7 @@ export function AppReleasesManager() {
           <ul className="divide-y divide-border">
             {previousReleases.map((release) => (
               <li key={release.id}>
-                <ReleaseRow release={release} publicBaseUrl={publicBaseUrl} />
+                <ReleaseRow release={release} />
               </li>
             ))}
           </ul>

@@ -8,6 +8,7 @@ import { useConsoleSync } from "@/components/console/console-sync-provider";
 import { Button } from "@/components/ui/button";
 import type { DeviceWithAssignments } from "@/lib/console-sync";
 import { useMediaUpload } from "@/hooks/use-media-upload";
+import { getMediaPublicBaseUrl } from "@/lib/object-storage/urls";
 import {
   appendMediaToPlaylist,
   ensureActivePlaylistForDevice,
@@ -15,8 +16,6 @@ import {
 import { cn } from "@/lib/utils";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useConsoleDataStore } from "@/stores/console-data-store";
-
-const publicBaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 
 interface DeviceQuickUploadButtonProps {
   device: DeviceWithAssignments;
@@ -37,8 +36,8 @@ export function DeviceQuickUploadButton({
   const addUploadedToDevice = useCallback(
     async (uploaded: Media[]) => {
       if (uploaded.length === 0) return;
-      if (!publicBaseUrl) {
-        toast.error("Missing NEXT_PUBLIC_SUPABASE_URL.");
+      if (!getMediaPublicBaseUrl()) {
+        toast.error("Missing NEXT_PUBLIC_MEDIA_BASE_URL.");
         return;
       }
 
@@ -56,13 +55,7 @@ export function DeviceQuickUploadButton({
         useConsoleDataStore.getState().playlistItemsByPlaylistId[playlistId]?.length ?? 0;
 
       for (const row of uploaded) {
-        const { error } = await appendMediaToPlaylist(
-          supabase,
-          playlistId,
-          row,
-          publicBaseUrl,
-          sortOrder,
-        );
+        const { error } = await appendMediaToPlaylist(supabase, playlistId, row, sortOrder);
         if (error) {
           toast.error(error);
           continue;

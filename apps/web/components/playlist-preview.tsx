@@ -4,12 +4,8 @@ import type { PlaylistItemWithMedia } from "@signage/types";
 import { ListVideo } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { mediaPublicUrl } from "@/lib/object-storage/urls";
 import { cn } from "@/lib/utils";
-
-function mediaUrl(publicBaseUrl: string, storagePath: string) {
-  const base = publicBaseUrl.replace(/\/$/, "");
-  return `${base}/storage/v1/object/public/media/${storagePath.split("/").map(encodeURIComponent).join("/")}`;
-}
 
 function slideDurationSec(item: PlaylistItemWithMedia): number {
   return Math.max(1, item.duration_seconds ?? 10);
@@ -17,16 +13,14 @@ function slideDurationSec(item: PlaylistItemWithMedia): number {
 
 function PreviewSlide({
   item,
-  publicBaseUrl,
   onImageDone,
   onVideoDone,
 }: {
   item: PlaylistItemWithMedia;
-  publicBaseUrl: string;
   onImageDone: () => void;
   onVideoDone: () => void;
 }) {
-  const url = mediaUrl(publicBaseUrl, item.media.storage_path);
+  const url = mediaPublicUrl(item.media.storage_path);
   const videoRef = useRef<HTMLVideoElement>(null);
   const videoDoneRef = useRef(false);
 
@@ -80,7 +74,7 @@ function PreviewSlide({
   }
 
   return (
-    // eslint-disable-next-line @next/next/no-img-element -- Supabase public URL
+    // eslint-disable-next-line @next/next/no-img-element -- MinIO public URL
     <img src={url} alt="" className="h-full w-full object-contain bg-black" />
   );
 }
@@ -106,7 +100,6 @@ function frameDescription(ctx: PlaylistPreviewFrameContext, hasDisplay: boolean)
 export function PlaylistPreviewButton({
   items,
   playlistName,
-  publicBaseUrl,
   className,
   frame = { kind: "playlist" },
   /** Icon-only control (e.g. dashboard table); same preview modal as the default trigger. */
@@ -114,7 +107,6 @@ export function PlaylistPreviewButton({
 }: {
   items: PlaylistItemWithMedia[];
   playlistName?: string | null;
-  publicBaseUrl: string;
   className?: string;
   /** Where the preview is opened from — device page uses TV-reported resolution when available. */
   frame?: PlaylistPreviewFrameContext;
@@ -226,7 +218,6 @@ export function PlaylistPreviewButton({
                   <PreviewSlide
                     key={`${item.id}-${index}`}
                     item={item}
-                    publicBaseUrl={publicBaseUrl}
                     onImageDone={advance}
                     onVideoDone={advance}
                   />

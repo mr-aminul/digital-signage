@@ -62,11 +62,10 @@ export async function appendMediaToPlaylist(
   supabase: SupabaseClient,
   playlistId: string,
   media: Media,
-  publicBaseUrl: string,
   sortOrder: number,
 ): Promise<{ error: string | null }> {
   if (media.file_type === "video") {
-    await ensureMediaVideoDuration(supabase, media, publicBaseUrl);
+    await ensureMediaVideoDuration(supabase, media);
   }
 
   const { error } = await supabase.from("playlist_items").insert(

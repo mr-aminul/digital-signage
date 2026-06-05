@@ -11,6 +11,7 @@ import { getDeviceDisplayDimensionsPx } from "@/components/device-telemetry-pane
 import { useStaleOnlineTick } from "@/hooks/use-stale-online-tick";
 import type { DeviceWithAssignments } from "@/lib/console-sync";
 import { effectiveDeviceStatus, formatDeviceLastSeen } from "@/lib/device-status";
+import { getMediaPublicBaseUrl } from "@/lib/object-storage/urls";
 import { cn } from "@/lib/utils";
 import { useConsoleDataStore } from "@/stores/console-data-store";
 
@@ -96,20 +97,16 @@ function DeviceStatusChip({ status }: { status: DeviceStatus }) {
   );
 }
 
-const publicBaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-
 function DashboardRowPlaylistPreview({
   device,
   activePlaylistId,
   playlistLabel,
   playlistItemsByPlaylistId,
-  publicBaseUrl,
 }: {
   device: DeviceWithAssignments | undefined;
   activePlaylistId: string;
   playlistLabel: string;
   playlistItemsByPlaylistId: Record<string, PlaylistItemWithMedia[]>;
-  publicBaseUrl: string;
 }) {
   const items = playlistItemsByPlaylistId[activePlaylistId] ?? [];
   const frame =
@@ -121,7 +118,6 @@ function DashboardRowPlaylistPreview({
     <PlaylistPreviewButton
       items={items}
       playlistName={playlistLabel}
-      publicBaseUrl={publicBaseUrl}
       frame={frame}
       iconOnly
       className="rounded-lg border-2 border-primary/40 bg-primary/12 text-primary shadow-sm transition hover:bg-primary/18 hover:border-primary/55 focus-visible:ring-2 focus-visible:ring-ring"
@@ -275,18 +271,17 @@ export default function DashboardHomePage() {
                       </td>
                       <td className="min-w-0 px-4 py-3">
                         <div className="flex min-w-0 max-w-[20rem] items-center gap-2.5">
-                          {row.activePlaylistId && publicBaseUrl ? (
+                          {row.activePlaylistId && getMediaPublicBaseUrl() ? (
                             <DashboardRowPlaylistPreview
                               device={devices.find((d) => d.id === row.id)}
                               activePlaylistId={row.activePlaylistId}
                               playlistLabel={row.playlistLabel}
                               playlistItemsByPlaylistId={playlistItemsByPlaylistId}
-                              publicBaseUrl={publicBaseUrl}
                             />
-                          ) : row.activePlaylistId && !publicBaseUrl ? (
+                          ) : row.activePlaylistId && !getMediaPublicBaseUrl() ? (
                             <span
                               className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 border-dashed border-border bg-muted/40 text-muted-foreground"
-                              title="Set NEXT_PUBLIC_SUPABASE_URL to preview media"
+                              title="Set NEXT_PUBLIC_MEDIA_BASE_URL to preview media"
                             >
                               <ListVideo className="h-[1.125rem] w-[1.125rem]" strokeWidth={2.35} aria-hidden />
                             </span>

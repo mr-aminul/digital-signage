@@ -5,8 +5,6 @@ import { useMemo } from "react";
 import { PlaylistEditor } from "@/components/playlist-editor";
 import { useConsoleDataStore } from "@/stores/console-data-store";
 
-const publicBaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-
 interface PlaylistPageProps {
   params: { id: string };
 }
@@ -42,5 +40,5 @@ export default function PlaylistDetailPage({ params }: PlaylistPageProps) {
     );
   }
 
-  return <PlaylistEditor playlistId={meta.id} initialName={meta.name} publicBaseUrl={publicBaseUrl} />;
+  return <PlaylistEditor playlistId={meta.id} initialName={meta.name} />;
 }

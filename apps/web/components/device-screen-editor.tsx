@@ -25,6 +25,7 @@ import type { DeviceWithAssignments } from "@/lib/console-sync";
 import { useStaleOnlineTick } from "@/hooks/use-stale-online-tick";
 import { effectiveDeviceStatus, formatDeviceLastSeen } from "@/lib/device-status";
 import { ensureMediaVideoDuration } from "@/lib/media";
+import { getMediaPublicBaseUrl, mediaPublicUrl } from "@/lib/object-storage/urls";
 import { buildPlaylistItemInsertRow, formatPlaylistClockLabel } from "@/lib/playlist-timing";
 import { cn } from "@/lib/utils";
 import { PlaylistAssetsPanel } from "@/components/playlist-assets-panel";
@@ -52,12 +53,6 @@ function reorder<T>(list: T[], startIndex: number, endIndex: number): T[] {
   if (!removed) return list;
   result.splice(endIndex, 0, removed);
   return result;
-}
-
-function mediaUrl(publicBaseUrl: string, storagePath: string) {
-  const base = publicBaseUrl.replace(/\/$/, "");
-  const path = storagePath.split("/").map(encodeURIComponent).join("/");
-  return `${base}/storage/v1/object/public/media/${path}`;
 }
 
 function statusLabel(status: DeviceStatus): string {
@@ -91,10 +86,9 @@ function ScreenStatusBadge({ status }: { status: DeviceStatus }) {
 interface DeviceScreenEditorProps {
   deviceId: string;
   ownerId: string;
-  publicBaseUrl: string;
 }
 
-export function DeviceScreenEditor({ deviceId, ownerId, publicBaseUrl }: DeviceScreenEditorProps) {
+export function DeviceScreenEditor({ deviceId, ownerId }: DeviceScreenEditorProps) {
   useStaleOnlineTick();
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const { syncNow } = useConsoleSync();
@@ -148,7 +142,7 @@ export function DeviceScreenEditor({ deviceId, ownerId, publicBaseUrl }: DeviceS
     await syncNow();
   }, [syncNow]);
 
-  useEnsurePlaylistVideoDurations(items, publicBaseUrl, supabase, reloadFromServer);
+  useEnsurePlaylistVideoDurations(items, supabase, reloadFromServer);
 
   const saveDeviceName = useCallback(async () => {
     if (!device) return;
@@ -321,7 +315,7 @@ export function DeviceScreenEditor({ deviceId, ownerId, publicBaseUrl }: DeviceS
         allMedia.find((m) => m.id === mediaId) ??
         (useConsoleDataStore.getState().media as Media[]).find((m) => m.id === mediaId);
       if (mediaRow?.file_type === "video") {
-        await ensureMediaVideoDuration(supabase, mediaRow, publicBaseUrl);
+        await ensureMediaVideoDuration(supabase, mediaRow);
       }
       const { data: row, error } = await supabase
         .from("playlist_items")
@@ -351,7 +345,7 @@ export function DeviceScreenEditor({ deviceId, ownerId, publicBaseUrl }: DeviceS
         setItems(fresh);
       }
     },
-    [allMedia, persistOrder, playlistId, publicBaseUrl, reloadFromServer, supabase],
+    [allMedia, persistOrder, playlistId, reloadFromServer, supabase],
   );
 
   const onDragEnd = useCallback(
@@ -437,10 +431,10 @@ export function DeviceScreenEditor({ deviceId, ownerId, publicBaseUrl }: DeviceS
     return null;
   }
 
-  if (!publicBaseUrl) {
+  if (!getMediaPublicBaseUrl()) {
     return (
       <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
-        Missing NEXT_PUBLIC_SUPABASE_URL. Copy `apps/web/.env.example` to `.env.local` to preview thumbnails.
+        Missing NEXT_PUBLIC_MEDIA_BASE_URL. Copy `apps/web/.env.example` to `.env.local` to preview thumbnails.
       </div>
     );
   }
@@ -672,7 +666,6 @@ export function DeviceScreenEditor({ deviceId, ownerId, publicBaseUrl }: DeviceS
                       <PlaylistPreviewButton
                         items={items}
                         playlistName={activePlaylistName}
-                        publicBaseUrl={publicBaseUrl}
                         frame={{ kind: "device", displayPx: deviceDisplayPxForPreview }}
                       />
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">{playlistPickerBar}</div>
@@ -735,7 +728,7 @@ export function DeviceScreenEditor({ deviceId, ownerId, publicBaseUrl }: DeviceS
                                         </button>
                                         <span className="ml-0.5">{index + 1}</span>
                                       </div>
-                                      <ScreenPlaylistRowThumb item={item} publicBaseUrl={publicBaseUrl} />
+                                      <ScreenPlaylistRowThumb item={item} />
                                       <div className="min-w-0">
                                         <p className="truncate text-sm font-medium">
                                           {item.media.original_filename ?? item.media.storage_path}
@@ -754,7 +747,7 @@ export function DeviceScreenEditor({ deviceId, ownerId, publicBaseUrl }: DeviceS
                                           <ReadonlyVideoDuration
                                             id={`duration-video-${item.id}`}
                                             durationSeconds={item.media.duration_seconds}
-                                            fallbackProbeUrl={mediaUrl(publicBaseUrl, item.media.storage_path)}
+                                            fallbackProbeUrl={mediaPublicUrl(item.media.storage_path)}
                                             onProbedDuration={(sec) =>
                                               void persistVideoMediaDuration(item.media.id, sec)
                                             }
@@ -811,7 +804,6 @@ export function DeviceScreenEditor({ deviceId, ownerId, publicBaseUrl }: DeviceS
 
             <PlaylistAssetsPanel
               ownerId={ownerId}
-              publicBaseUrl={publicBaseUrl}
               droppableId="media-library"
               libraryResetKey={libraryResetKey}
               librarySearch={librarySearch}
@@ -827,8 +819,8 @@ export function DeviceScreenEditor({ deviceId, ownerId, publicBaseUrl }: DeviceS
   );
 }
 
-function ScreenPlaylistRowThumb({ item, publicBaseUrl }: { item: PlaylistItemWithMedia; publicBaseUrl: string }) {
-  const url = mediaUrl(publicBaseUrl, item.media.storage_path);
+function ScreenPlaylistRowThumb({ item }: { item: PlaylistItemWithMedia }) {
+  const url = mediaPublicUrl(item.media.storage_path);
   return (
     <div className="relative h-12 w-[4.5rem] shrink-0 overflow-hidden rounded-md border border-border bg-muted">
       {item.media.file_type === "image" ? (

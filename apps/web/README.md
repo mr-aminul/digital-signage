@@ -9,7 +9,9 @@ pnpm install
 cp .env.example .env.local
 ```
 
-Fill `.env.local` with your Supabase URL and anon key, then apply SQL migrations from `packages/database/migrations` in the Supabase SQL editor.
+Fill `.env.local` with Supabase URL/anon key **and** MinIO settings (see `.env.example` for `NEXT_PUBLIC_MEDIA_BASE_URL`, `S3_*`). Apply SQL migrations from `packages/database/migrations` in the Supabase SQL editor.
+
+Create MinIO buckets `onesign-media` and `onesign-releases` on your VPS (`scripts/init-onesign-minio-buckets.sh`).
 
 Enable **Anonymous sign-ins** (Authentication → Providers) so the Android TV app can register devices without a service role key.
 
@@ -26,4 +28,4 @@ pnpm dev
 
 ## Deploy (Vercel)
 
-Set the same `NEXT_PUBLIC_*` variables in the Vercel project settings and connect your Supabase project.
+Set `NEXT_PUBLIC_SUPABASE_*`, `NEXT_PUBLIC_MEDIA_BASE_URL`, `NEXT_PUBLIC_RELEASES_BASE_URL`, and server-only `S3_*` variables in the Vercel project settings.

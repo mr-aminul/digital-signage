@@ -5,3 +5,7 @@ sdk.dir=C:\\Users\\you\\AppData\\Local\\Android\\Sdk
 ## Supabase (same values as the web dashboard anon client)
 supabase.url=https://YOUR_PROJECT_REF.supabase.co
 supabase.anon.key=YOUR_ANON_KEY
+
+## MinIO public read bases (path-style, includes bucket name)
+media.base.url=https://s3.steakandmarrow.inventivelab.bd/onesign-media
+releases.base.url=https://s3.steakandmarrow.inventivelab.bd/onesign-releases

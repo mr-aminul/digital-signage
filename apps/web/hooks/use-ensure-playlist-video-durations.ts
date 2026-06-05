@@ -1,49 +1,40 @@
 "use client";
 
-import { ensureMediaVideoDuration } from "@/lib/media";
 import type { PlaylistItemWithMedia } from "@signage/types";
+import { useEffect } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { useEffect, useMemo } from "react";
+import { getMediaPublicBaseUrl } from "@/lib/object-storage/urls";
+import { ensureMediaVideoDuration } from "@/lib/media";
 
-/** Probes and persists intrinsic length for playlist videos missing media.duration_seconds. */
 export function useEnsurePlaylistVideoDurations(
   items: PlaylistItemWithMedia[],
-  publicBaseUrl: string,
   supabase: SupabaseClient,
   onUpdated: () => void | Promise<void>,
 ) {
-  const videoProbeKey = useMemo(
-    () =>
-      items
-        .filter((i) => i.media.file_type === "video")
-        .map((i) => `${i.media.id}:${i.media.duration_seconds ?? ""}`)
-        .join("|"),
-    [items],
-  );
+  const videoProbeKey = items
+    .filter((item) => item.media.file_type === "video")
+    .map((item) => `${item.media.id}:${item.media.duration_seconds ?? "null"}`)
+    .join("|");
 
   useEffect(() => {
-    if (!publicBaseUrl) return;
-
-    const needsProbe = items.filter((i) => {
-      if (i.media.file_type !== "video") return false;
-      if (i.media.duration_seconds == null || i.media.duration_seconds <= 0) return true;
-      return i.media.storage_path.toLowerCase().endsWith(".webm");
-    });
-    if (needsProbe.length === 0) return;
+    const mediaBaseUrl = getMediaPublicBaseUrl();
+    if (!mediaBaseUrl) return;
 
     let cancelled = false;
+
     void (async () => {
-      let changed = false;
-      for (const item of needsProbe) {
-        const before = item.media.duration_seconds ?? null;
-        const sec = await ensureMediaVideoDuration(supabase, item.media, publicBaseUrl);
-        if (sec != null && sec !== before) changed = true;
+      for (const item of items) {
+        if (cancelled) return;
+        if (item.media.file_type !== "video") continue;
+        const sec = await ensureMediaVideoDuration(supabase, item.media);
+        if (sec != null && !cancelled) {
+          await onUpdated();
+        }
       }
-      if (changed && !cancelled) await onUpdated();
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [items, onUpdated, publicBaseUrl, supabase, videoProbeKey]);
+  }, [items, onUpdated, supabase, videoProbeKey]);
 }

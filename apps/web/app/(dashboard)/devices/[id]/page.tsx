@@ -6,8 +6,6 @@ import { DeviceScreenEditor } from "@/components/device-screen-editor";
 import type { DeviceWithAssignments } from "@/lib/console-sync";
 import { useConsoleDataStore } from "@/stores/console-data-store";
 
-const publicBaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-
 export default function DeviceDetailPage() {
   const params = useParams();
   const id = typeof params?.id === "string" ? params.id : "";
@@ -29,14 +27,6 @@ export default function DeviceDetailPage() {
     );
   }
 
-  if (!publicBaseUrl) {
-    return (
-      <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
-        Missing NEXT_PUBLIC_SUPABASE_URL. Copy `apps/web/.env.example` to `.env.local`.
-      </div>
-    );
-  }
-
   if (!id) {
     notFound();
   }
@@ -53,5 +43,5 @@ export default function DeviceDetailPage() {
     );
   }
 
-  return <DeviceScreenEditor deviceId={device.id} ownerId={ownerId} publicBaseUrl={publicBaseUrl} />;
+  return <DeviceScreenEditor deviceId={device.id} ownerId={ownerId} />;
 }

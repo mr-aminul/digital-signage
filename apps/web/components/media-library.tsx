@@ -11,13 +11,12 @@ import { Input } from "@/components/ui/input";
 import { useConsoleSync } from "@/components/console/console-sync-provider";
 import { useMediaUpload } from "@/hooks/use-media-upload";
 import { MEDIA_UPLOAD_ACCEPT } from "@/lib/upload-media";
+import { mediaPublicUrl } from "@/lib/object-storage/urls";
 import { cn } from "@/lib/utils";
-import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useConsoleDataStore } from "@/stores/console-data-store";
 
 interface MediaLibraryProps {
   userId: string;
-  publicBaseUrl: string;
 }
 
 type TypeFilter = "all" | "image" | "video" | "unknown";
@@ -43,8 +42,7 @@ const FILTER_ROWS: { id: TypeFilter; label: string; icon: typeof ImageIcon }[] =
   { id: "unknown", label: "Other", icon: FileImage },
 ];
 
-export function MediaLibrary({ userId, publicBaseUrl }: MediaLibraryProps) {
-  const supabase = useMemo(() => getSupabaseBrowserClient(), []);
+export function MediaLibrary({ userId }: MediaLibraryProps) {
   const { syncNow } = useConsoleSync();
   const items = useConsoleDataStore((s) => s.media) as Media[];
   const { uploading, uploadFiles } = useMediaUpload(userId, { withDropzone: false });
@@ -74,16 +72,31 @@ export function MediaLibrary({ userId, publicBaseUrl }: MediaLibraryProps) {
   }, [items, typeFilter, search]);
 
   async function removeMedia(row: Media) {
-    const { error: storageError } = await supabase.storage.from("media").remove([row.storage_path]);
-    if (storageError) {
-      toast.error(storageError.message);
+    let response: Response;
+    try {
+      response = await fetch("/api/media/delete", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: row.id, storagePath: row.storage_path }),
+      });
+    } catch {
+      toast.error("Network error while deleting media.");
       return;
     }
-    const { error } = await supabase.from("media").delete().eq("id", row.id);
-    if (error) {
-      toast.error(error.message);
+
+    let payload: { error?: string };
+    try {
+      payload = (await response.json()) as { error?: string };
+    } catch {
+      toast.error("Invalid server response while deleting media.");
       return;
     }
+
+    if (!response.ok) {
+      toast.error(payload.error ?? "Delete failed");
+      return;
+    }
+
     toast.success("Media deleted");
     await syncNow();
   }
@@ -209,13 +222,13 @@ export function MediaLibrary({ userId, publicBaseUrl }: MediaLibraryProps) {
             ) : view === "grid" ? (
               <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {filtered.map((item) => (
-                  <MediaCard key={item.id} item={item} publicBaseUrl={publicBaseUrl} onRemove={() => void removeMedia(item)} />
+                  <MediaCard key={item.id} item={item} onRemove={() => void removeMedia(item)} />
                 ))}
               </ul>
             ) : (
               <ul className="divide-y divide-border rounded-lg border border-border bg-card">
                 {filtered.map((item) => (
-                  <MediaListRow key={item.id} item={item} publicBaseUrl={publicBaseUrl} onRemove={() => void removeMedia(item)} />
+                  <MediaListRow key={item.id} item={item} onRemove={() => void removeMedia(item)} />
                 ))}
               </ul>
             )}
@@ -250,14 +263,12 @@ function TypeCornerBadge({ fileType }: { fileType: Media["file_type"] }) {
 
 function MediaCard({
   item,
-  publicBaseUrl,
   onRemove,
 }: {
   item: Media;
-  publicBaseUrl: string;
   onRemove: () => void;
 }) {
-  const url = `${publicBaseUrl}/storage/v1/object/public/media/${item.storage_path}`;
+  const url = mediaPublicUrl(item.storage_path);
   const name = item.original_filename ?? item.storage_path;
 
   return (
@@ -301,14 +312,12 @@ function MediaCard({
 
 function MediaListRow({
   item,
-  publicBaseUrl,
   onRemove,
 }: {
   item: Media;
-  publicBaseUrl: string;
   onRemove: () => void;
 }) {
-  const url = `${publicBaseUrl}/storage/v1/object/public/media/${item.storage_path}`;
+  const url = mediaPublicUrl(item.storage_path);
   const name = item.original_filename ?? item.storage_path;
 
   return (

@@ -3,18 +3,8 @@
 import { MediaLibrary } from "@/components/media-library";
 import { useConsoleDataStore } from "@/stores/console-data-store";
 
-const publicBaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-
 export default function MediaPage() {
   const ownerId = useConsoleDataStore((s) => s.ownerId);
-
-  if (!publicBaseUrl) {
-    return (
-      <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
-        Missing NEXT_PUBLIC_SUPABASE_URL. Copy `apps/web/.env.example` to `.env.local`.
-      </div>
-    );
-  }
 
   if (!ownerId) {
     return (
@@ -25,5 +15,5 @@ export default function MediaPage() {
     );
   }
 
-  return <MediaLibrary userId={ownerId} publicBaseUrl={publicBaseUrl} />;
+  return <MediaLibrary userId={ownerId} />;
 }

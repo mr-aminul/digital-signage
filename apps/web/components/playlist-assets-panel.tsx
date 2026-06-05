@@ -8,16 +8,11 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useMediaUpload } from "@/hooks/use-media-upload";
+import { mediaPublicUrl } from "@/lib/object-storage/urls";
 import { cn, mediaLibraryAddButtonClassName } from "@/lib/utils";
 
-function mediaUrl(publicBaseUrl: string, storagePath: string) {
-  const base = publicBaseUrl.replace(/\/$/, "");
-  const path = storagePath.split("/").map(encodeURIComponent).join("/");
-  return `${base}/storage/v1/object/public/media/${path}`;
-}
-
-function LibraryThumb({ media, publicBaseUrl }: { media: Media; publicBaseUrl: string }) {
-  const url = mediaUrl(publicBaseUrl, media.storage_path);
+function LibraryThumb({ media }: { media: Media }) {
+  const url = mediaPublicUrl(media.storage_path);
   return (
     <div className="relative h-11 w-14 shrink-0 overflow-hidden rounded-md border border-border bg-muted">
       {media.file_type === "image" ? (
@@ -35,7 +30,6 @@ function LibraryThumb({ media, publicBaseUrl }: { media: Media; publicBaseUrl: s
 
 interface PlaylistAssetsPanelProps {
   ownerId: string;
-  publicBaseUrl: string;
   droppableId: string;
   libraryResetKey: number;
   librarySearch: string;
@@ -49,7 +43,6 @@ interface PlaylistAssetsPanelProps {
 
 export function PlaylistAssetsPanel({
   ownerId,
-  publicBaseUrl,
   droppableId,
   libraryResetKey,
   librarySearch,
@@ -141,7 +134,7 @@ export function PlaylistAssetsPanel({
                             snapshot.isDragging && "opacity-90 ring-2 ring-brand-faint30",
                           )}
                         >
-                          <LibraryThumb media={m} publicBaseUrl={publicBaseUrl} />
+                          <LibraryThumb media={m} />
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-xs font-medium">{m.original_filename ?? m.storage_path}</p>
                             <p className="text-[0.625rem] capitalize text-muted-foreground">{m.file_type}</p>

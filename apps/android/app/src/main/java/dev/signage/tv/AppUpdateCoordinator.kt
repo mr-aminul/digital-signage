@@ -262,9 +262,9 @@ class AppUpdateCoordinator(
     }
 
     private fun buildDownloadUrl(storagePath: String): String {
-        val base = BuildConfig.SUPABASE_URL.trim().trimEnd('/')
+        val base = BuildConfig.RELEASES_BASE_URL.trim().trimEnd('/')
         val path = storagePath.trimStart('/')
-        return "$base/storage/v1/object/public/releases/$path"
+        return "$base/$path"
     }
 
     private fun cachedApkFile(): File = File(application.cacheDir, "ota-update.apk")

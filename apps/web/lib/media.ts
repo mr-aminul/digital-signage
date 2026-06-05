@@ -1,5 +1,6 @@
 import type { Media, MediaFileType } from "@signage/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { mediaPublicUrl as buildMediaPublicUrl } from "@/lib/object-storage/urls";
 import {
   durationSecondsForStorage,
   probeVideoFileDurationSeconds,
@@ -19,10 +20,7 @@ export function isAcceptedSignageMime(mime: string): boolean {
   return inferMediaFileType(mime) !== "unknown";
 }
 
-export function mediaPublicUrl(publicBaseUrl: string, storagePath: string): string {
-  const base = publicBaseUrl.replace(/\/$/, "");
-  return `${base}/storage/v1/object/public/media/${storagePath.split("/").map(encodeURIComponent).join("/")}`;
-}
+export { buildMediaPublicUrl as mediaPublicUrl };
 
 export { probeVideoUrlDurationSeconds } from "@/lib/video-duration-probe";
 
@@ -34,7 +32,6 @@ function isWebmStoragePath(storagePath: string): boolean {
 export async function ensureMediaVideoDuration(
   supabase: SupabaseClient,
   media: Pick<Media, "id" | "file_type" | "duration_seconds" | "storage_path">,
-  publicBaseUrl: string,
 ): Promise<number | null> {
   if (media.file_type !== "video") return null;
 
@@ -48,7 +45,7 @@ export async function ensureMediaVideoDuration(
     return stored;
   }
 
-  const probed = await probeVideoUrlDurationSeconds(mediaPublicUrl(publicBaseUrl, media.storage_path));
+  const probed = await probeVideoUrlDurationSeconds(buildMediaPublicUrl(media.storage_path));
   const rounded = durationSecondsForStorage(probed);
   if (rounded == null) return stored;
 

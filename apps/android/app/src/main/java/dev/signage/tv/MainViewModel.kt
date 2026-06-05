@@ -1418,12 +1418,16 @@ class MainViewModel(
     }
 
     private fun publicMediaUrl(storagePath: String): String {
-        val base = BuildConfig.SUPABASE_URL.trimEnd('/')
+        val base = BuildConfig.MEDIA_BASE_URL.trim().trimEnd('/')
+        if (base.isBlank()) {
+            Log.e(LOG_TAG, "MEDIA_BASE_URL is blank; cannot build media URL")
+            return ""
+        }
         val encoded =
             storagePath.split("/").joinToString("/") { segment ->
                 java.net.URLEncoder.encode(segment, Charsets.UTF_8.name()).replace("+", "%20")
             }
-        return "$base/storage/v1/object/public/media/$encoded"
+        return "$base/$encoded"
     }
 
     fun resetRegistration() {

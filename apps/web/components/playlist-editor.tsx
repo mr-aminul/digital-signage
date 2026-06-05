@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/label";
 import { useConsoleSync } from "@/components/console/console-sync-provider";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { ensureMediaVideoDuration } from "@/lib/media";
+import { getMediaPublicBaseUrl, mediaPublicUrl } from "@/lib/object-storage/urls";
 import { buildPlaylistItemInsertRow, formatPlaylistClockLabel } from "@/lib/playlist-timing";
 import { cn } from "@/lib/utils";
 import { PlaylistAssetsPanel } from "@/components/playlist-assets-panel";
@@ -41,14 +42,8 @@ function reorder<T>(list: T[], startIndex: number, endIndex: number): T[] {
   return result;
 }
 
-function mediaUrl(publicBaseUrl: string, storagePath: string) {
-  const base = publicBaseUrl.replace(/\/$/, "");
-  const path = storagePath.split("/").map(encodeURIComponent).join("/");
-  return `${base}/storage/v1/object/public/media/${path}`;
-}
-
-function RowThumb({ item, publicBaseUrl }: { item: PlaylistItemWithMedia; publicBaseUrl: string }) {
-  const url = mediaUrl(publicBaseUrl, item.media.storage_path);
+function RowThumb({ item }: { item: PlaylistItemWithMedia }) {
+  const url = mediaPublicUrl(item.media.storage_path);
   return (
     <div className="relative h-12 w-[4.5rem] shrink-0 overflow-hidden rounded-md border border-border bg-muted">
       {item.media.file_type === "image" ? (
@@ -67,10 +62,9 @@ function RowThumb({ item, publicBaseUrl }: { item: PlaylistItemWithMedia; public
 interface PlaylistEditorProps {
   playlistId: string;
   initialName: string;
-  publicBaseUrl: string;
 }
 
-export function PlaylistEditor({ playlistId, initialName, publicBaseUrl }: PlaylistEditorProps) {
+export function PlaylistEditor({ playlistId, initialName }: PlaylistEditorProps) {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const ownerId = useConsoleDataStore((s) => s.ownerId);
   const { syncNow } = useConsoleSync();
@@ -97,7 +91,7 @@ export function PlaylistEditor({ playlistId, initialName, publicBaseUrl }: Playl
     await syncNow();
   }, [syncNow]);
 
-  useEnsurePlaylistVideoDurations(items, publicBaseUrl, supabase, reloadFromServer);
+  useEnsurePlaylistVideoDurations(items, supabase, reloadFromServer);
 
   const playlistTimingLabel = useMemo(() => formatPlaylistClockLabel(items), [items]);
 
@@ -164,7 +158,7 @@ export function PlaylistEditor({ playlistId, initialName, publicBaseUrl }: Playl
         allMedia.find((m) => m.id === mediaId) ??
         (useConsoleDataStore.getState().media as Media[]).find((m) => m.id === mediaId);
       if (mediaRow?.file_type === "video") {
-        await ensureMediaVideoDuration(supabase, mediaRow, publicBaseUrl);
+        await ensureMediaVideoDuration(supabase, mediaRow);
       }
       const { data: row, error } = await supabase
         .from("playlist_items")
@@ -194,7 +188,7 @@ export function PlaylistEditor({ playlistId, initialName, publicBaseUrl }: Playl
         setItems(fresh);
       }
     },
-    [allMedia, persistOrder, playlistId, publicBaseUrl, reloadFromServer, supabase],
+    [allMedia, persistOrder, playlistId, reloadFromServer, supabase],
   );
 
   const removeItem = useCallback(
@@ -282,10 +276,10 @@ export function PlaylistEditor({ playlistId, initialName, publicBaseUrl }: Playl
     [addMediaAtIndex, items.length, playlistId],
   );
 
-  if (!publicBaseUrl) {
+  if (!getMediaPublicBaseUrl()) {
     return (
       <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
-        Missing NEXT_PUBLIC_SUPABASE_URL. Copy `apps/web/.env.example` to `.env.local` to preview thumbnails.
+        Missing NEXT_PUBLIC_MEDIA_BASE_URL. Copy `apps/web/.env.example` to `.env.local` to preview thumbnails.
       </div>
     );
   }
@@ -379,7 +373,7 @@ export function PlaylistEditor({ playlistId, initialName, publicBaseUrl }: Playl
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 sm:pt-0.5">
-                  <PlaylistPreviewButton items={items} playlistName={isEditingName ? name : initialName} publicBaseUrl={publicBaseUrl} />
+                  <PlaylistPreviewButton items={items} playlistName={isEditingName ? name : initialName} />
                   <Link
                     href="/devices"
                     className={cn(buttonVariants({ size: "sm" }), "gap-2 font-semibold")}
@@ -444,7 +438,7 @@ export function PlaylistEditor({ playlistId, initialName, publicBaseUrl }: Playl
                                     </button>
                                     <span className="ml-0.5">{index + 1}</span>
                                   </div>
-                                  <RowThumb item={item} publicBaseUrl={publicBaseUrl} />
+                                  <RowThumb item={item} />
                                   <div className="min-w-0">
                                     <p className="truncate text-sm font-medium">
                                       {item.media.original_filename ?? item.media.storage_path}
@@ -463,7 +457,7 @@ export function PlaylistEditor({ playlistId, initialName, publicBaseUrl }: Playl
                                       <ReadonlyVideoDuration
                                         id={`duration-video-${item.id}`}
                                         durationSeconds={item.media.duration_seconds}
-                                        fallbackProbeUrl={mediaUrl(publicBaseUrl, item.media.storage_path)}
+                                        fallbackProbeUrl={mediaPublicUrl(item.media.storage_path)}
                                         onProbedDuration={(sec) =>
                                           void persistVideoMediaDuration(item.media.id, sec)
                                         }
@@ -521,7 +515,6 @@ export function PlaylistEditor({ playlistId, initialName, publicBaseUrl }: Playl
       {ownerId ? (
         <PlaylistAssetsPanel
           ownerId={ownerId}
-          publicBaseUrl={publicBaseUrl}
           droppableId="playlist-library"
           libraryResetKey={libraryResetKey}
           librarySearch={librarySearch}

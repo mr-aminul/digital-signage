@@ -12,12 +12,15 @@ SQL migrations in `migrations/` are **idempotent-friendly** ordered files. Apply
 - **Realtime**: tables added to `supabase_realtime` publication where live updates matter
 - **Indexes**: common filters (`owner_id`, `device_id`, `playlist_id`, `pairing_code`)
 
-## Storage
+## Storage (MinIO on VPS)
 
-The migration documents the `media` bucket. In the Supabase Dashboard:
+Media files and TV APKs are stored in **MinIO**, not Supabase Storage. Supabase holds metadata only (`media.storage_path`, `app_releases.storage_path`).
 
-1. **Storage** → **New bucket** → name `media`, set **public** if you want direct CDN-style URLs, or private + signed URLs from the web app.
-2. Policies in migration `00002_storage_media.sql` align uploads with `media.owner_id = auth.uid()`.
+1. Create buckets `onesign-media` and `onesign-releases` on MinIO (public read for TV playback).
+2. Run `scripts/init-onesign-minio-buckets.sh` on the VPS (requires `mc` CLI).
+3. Configure `apps/web/.env.local` — see `apps/web/.env.example` for `NEXT_PUBLIC_MEDIA_BASE_URL`, `S3_*`, and Android `local.properties` for `media.base.url`.
+
+Legacy migration `00002_storage_media.sql` documented Supabase buckets; new uploads go to MinIO via the web API.
 
 ## TV authentication (important)
 
