@@ -10,7 +10,7 @@ echo "Creating buckets: ${MEDIA_BUCKET}, ${RELEASES_BUCKET}"
 
 mc alias list "${MINIO_ALIAS}" >/dev/null 2>&1 || {
   echo "MinIO alias '${MINIO_ALIAS}' not found. Configure mc first, e.g.:"
-  echo "  mc alias set local https://YOUR_S3_HOST ACCESS_KEY SECRET_KEY"
+  echo "  mc alias set local https://s3.storage.inventivelab.bd ACCESS_KEY SECRET_KEY"
   exit 1
 }
 
@@ -22,6 +22,6 @@ mc anonymous set download "${MINIO_ALIAS}/${MEDIA_BUCKET}"
 mc anonymous set download "${MINIO_ALIAS}/${RELEASES_BUCKET}"
 
 echo "Done. Public URLs:"
-S3_PUBLIC_HOST="${S3_PUBLIC_HOST:-YOUR_S3_HOST}"
+S3_PUBLIC_HOST="${S3_PUBLIC_HOST:-s3.storage.inventivelab.bd}"
 echo "  Media:    https://${S3_PUBLIC_HOST}/${MEDIA_BUCKET}/<ownerId>/<file>"
 echo "  Releases: https://${S3_PUBLIC_HOST}/${RELEASES_BUCKET}/<path>"
