@@ -70,9 +70,11 @@ export type DeviceMediaCacheSummary = {
 /** One-line cache status for device cards and the screen editor. */
 export function deviceMediaCacheSummary(device: Device): DeviceMediaCacheSummary | null {
   const cache = getDeviceMediaCache(device);
-  if (!cache || cache.items_total <= 0) return null;
+  if (!cache) return null;
+  const total = cache.items_total;
+  if (total == null || total <= 0) return null;
 
-  const { items_ready: ready, items_total: total } = cache;
+  const ready = cache.items_ready ?? 0;
   const warming = cache.warming === true;
 
   let tone: DeviceMediaCacheSummary["tone"];
