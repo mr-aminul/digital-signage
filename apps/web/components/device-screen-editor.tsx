@@ -42,6 +42,7 @@ import {
   getDeviceDisplayDimensionsPx,
 } from "@/components/device-telemetry-panel";
 import { DeviceAppUpdateNotice, DeviceAppVersionChip } from "@/components/device-app-version-chip";
+import { DeviceMediaCacheChip } from "@/components/device-media-cache-chip";
 import { useActiveAppRelease } from "@/hooks/use-active-app-release";
 
 /** Stable fallback so Zustand selectors don’t return a new [] every run (avoids render loops). */
@@ -564,6 +565,7 @@ export function DeviceScreenEditor({ deviceId, ownerId }: DeviceScreenEditorProp
                     <span className="min-w-0 font-medium text-foreground">{formatDeviceLastSeen(device.last_seen)}</span>
                   </span>
                   <DeviceAppVersionChip device={device} activeRelease={activeAppRelease} />
+                  <DeviceMediaCacheChip device={device} />
                 </div>
                 {(screenHardwareBasics.brand || screenHardwareBasics.model || screenHardwareBasics.screenSize) && (
                   <div

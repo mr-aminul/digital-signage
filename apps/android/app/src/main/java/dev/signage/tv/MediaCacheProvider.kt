@@ -13,7 +13,10 @@ import java.io.File
 object MediaCacheProvider {
     private const val TAG = "MediaCacheProvider"
     private const val CACHE_DIR_NAME = "exomedia3"
-    private const val MAX_CACHE_SIZE = 200L * 1024L * 1024L // 200MB
+    /** Phase 1 signage cache budget — enough for several HD clips; LRU evicts oldest spans. */
+    private const val MAX_CACHE_SIZE = 1024L * 1024L * 1024L // 1 GiB
+
+    fun maxCacheBytes(): Long = MAX_CACHE_SIZE
 
     @Volatile
     private var cacheInstance: SimpleCache? = null

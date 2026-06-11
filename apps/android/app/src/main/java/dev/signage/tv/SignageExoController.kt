@@ -24,9 +24,10 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import java.io.File
 import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -189,46 +190,118 @@ class SignageExoController(
 
     private val prefetchJob = SupervisorJob()
     private val ioScope = CoroutineScope(prefetchJob + Dispatchers.IO)
-    private var prefetching: Job? = null
-    private var prefetchUrlInFlight: String? = null
+    private val prefetchJobs = ConcurrentHashMap<String, Job>()
+    private val playlistWarmGeneration = AtomicInteger(0)
+    private var playlistWarmJob: Job? = null
 
-    fun requestPrefetchIfVideo(url: String) {
-        prefetching?.cancel()
-        prefetching =
+    /** URL bound to Exo right now — do not background-cache the same bytes. */
+    fun currentlyPlayingVideoUrl(): String? = boundVideo?.url
+
+    /** True while a sequential playlist warm or ad-hoc prefetch job is running. */
+    fun isBackgroundVideoCachingActive(): Boolean =
+        playlistWarmJob?.isActive == true || prefetchJobs.values.any { it.isActive }
+
+    fun cancelVideoPrefetchExcept(allowedUrls: Collection<String>) {
+        val allowed = allowedUrls.toSet()
+        prefetchJobs.keys.filter { it !in allowed }.forEach { url ->
+            prefetchJobs.remove(url)?.cancel()
+        }
+    }
+
+    fun cancelPlaylistVideoWarm() {
+        playlistWarmGeneration.incrementAndGet()
+        playlistWarmJob?.cancel()
+        playlistWarmJob = null
+    }
+
+    /**
+     * Downloads [urls] one at a time (highest priority first). Cancels in-flight jobs for URLs
+     * not in this playlist generation. Never blocks the main thread or active Exo decode.
+     */
+    fun schedulePrioritizedVideoWarm(urls: List<String>) {
+        if (urls.isEmpty()) {
+            return
+        }
+        val generation = playlistWarmGeneration.incrementAndGet()
+        playlistWarmJob?.cancel()
+        playlistWarmJob =
             ioScope.launch {
-                val jobUrl = url
-                prefetchUrlInFlight = jobUrl
-                try {
-                    withContext(Dispatchers.IO) {
-                        val uri = Uri.parse(url)
-                        val dataSource = cacheDataSourceFactory.createDataSource() as? CacheDataSource
-                            ?: return@withContext
-                        val dataSpec = DataSpec.Builder()
-                            .setUri(uri)
-                            .setPosition(0)
-                            .setLength(4L * 1024L * 1024L)
-                            .build()
-                        val writer = CacheWriter(dataSource, dataSpec, null, null)
-                        if (!isActive) {
-                            writer.cancel()
-                            return@withContext
-                        }
-                        runCatching {
-                            writer.cache()
-                        }.onFailure { e: Throwable ->
-                            if (e is IOException) {
-                                Log.d(log, "Prefetch end: $e")
-                            } else {
-                                throw e
-                            }
-                        }
+                for (url in urls) {
+                    if (!isActive || generation != playlistWarmGeneration.get()) {
+                        return@launch
                     }
-                } finally {
-                    if (prefetchUrlInFlight == jobUrl) {
-                        prefetchUrlInFlight = null
-                    }
+                    cacheVideoUrlFully(url)
                 }
             }
+    }
+
+    fun requestPrefetchVideos(urls: List<String>) {
+        urls.forEach { requestPrefetchVideo(it) }
+    }
+
+    /** Fully cache [url] on disk (resumes partial spans). No-op when Exo is playing that URL. */
+    fun requestPrefetchVideo(url: String) {
+        if (url.isBlank()) {
+            return
+        }
+        if (url == boundVideo?.url) {
+            Log.d(log, "Skip full prefetch; url is actively playing: $url")
+            return
+        }
+        if (prefetchJobs[url]?.isActive == true) {
+            return
+        }
+        prefetchJobs[url]?.cancel()
+        prefetchJobs[url] =
+            ioScope.launch {
+                try {
+                    cacheVideoUrlFully(url)
+                } finally {
+                    prefetchJobs.remove(url)
+                }
+            }
+    }
+
+    private suspend fun cacheVideoUrlFully(url: String) {
+        if (url.isBlank()) {
+            return
+        }
+        if (url == boundVideo?.url) {
+            Log.d(log, "Skip full prefetch; url is actively playing: $url")
+            return
+        }
+        val existing = prefetchJobs[url]
+        if (existing?.isActive == true) {
+            existing.join()
+            return
+        }
+        withContext(Dispatchers.IO) {
+            val uri = Uri.parse(url)
+            val dataSource = cacheDataSourceFactory.createDataSource() as? CacheDataSource
+                ?: return@withContext
+            val dataSpec =
+                DataSpec.Builder()
+                    .setUri(uri)
+                    .setPosition(0)
+                    .build()
+            val writer = CacheWriter(dataSource, dataSpec, null, null)
+            if (!coroutineContext.isActive) {
+                writer.cancel()
+                return@withContext
+            }
+            Log.i(log, "Full prefetch started url=$url")
+            runCatching {
+                writer.cache()
+            }.onSuccess {
+                Log.i(log, "Full prefetch complete url=$url")
+            }.onFailure { e: Throwable ->
+                if (e is IOException) {
+                    Log.d(log, "Full prefetch ended url=$url: $e")
+                } else {
+                    throw e
+                }
+            }
+        }
     }
 
     /**
@@ -515,7 +588,9 @@ class SignageExoController(
     }
 
     fun release() {
-        prefetching?.cancel()
+        cancelPlaylistVideoWarm()
+        prefetchJobs.values.forEach { it.cancel() }
+        prefetchJobs.clear()
         prefetchJob.cancel()
         onPlayerViewDetached()
         exo.release()

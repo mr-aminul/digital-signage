@@ -218,7 +218,7 @@ fun PlaybackScreen(
         }
 
     LaunchedEffect(index, state.slides, state.contentRevision) {
-        viewModel.onPlaybackSlideContext(index, state.slides)
+        viewModel.onPlaybackSlideContext(index, state.slides, state.contentRevision)
     }
 
     LaunchedEffect(slide.fileType, index, visit, slide.url) {

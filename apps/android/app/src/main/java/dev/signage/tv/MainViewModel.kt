@@ -258,6 +258,7 @@ class MainViewModel(
     private var telemetryDeviceId: String? = null
     private val lastContentRevision = AtomicReference<String?>(null)
     private var signageExo: SignageExoController? = null
+    private var playlistCacheCoordinator: PlaylistMediaCacheCoordinator? = null
     private var playbackRealtime: PlaybackRealtimeCoordinator? = null
     private val playbackSyncHintsPollFast = AtomicBoolean(false)
     private val manifestNeedsQuickFollowUp = AtomicBoolean(true)
@@ -551,7 +552,19 @@ class MainViewModel(
         }
     }
 
+    private fun ensurePlaylistCacheCoordinator() {
+        if (playlistCacheCoordinator == null) {
+            playlistCacheCoordinator =
+                PlaylistMediaCacheCoordinator(
+                    app = getApplication(),
+                    scope = viewModelScope,
+                    exoProvider = { signageExo },
+                )
+        }
+    }
+
     private fun releaseSignageExo() {
+        playlistCacheCoordinator?.cancelAll()
         signageExo?.release()
         signageExo = null
     }
@@ -611,22 +624,17 @@ class MainViewModel(
     }
 
     /**
-     * Prefetch the *next* slide in loop order when it is a video, so a prior image (or first loop)
-     * can warm the disk cache and Exo buffer.
+     * Phase 2 warm cache: after manifest/slide context updates, background-fill the full playlist
+     * in loop order (current first) without blocking playback.
      */
     fun onPlaybackSlideContext(
         currentIndex: Int,
         slides: List<PlaybackSlide>,
+        contentRevision: String? = null,
     ) {
-        if (slides.isEmpty()) {
-            return
-        }
-        if (!shouldPrefetchNextVideoSlide(currentIndex, slides)) {
-            return
-        }
-        val n = slides.size
-        val next = slides[(currentIndex + 1) % n]
-        signageExo?.requestPrefetchIfVideo(next.url)
+        ensureSignageExo()
+        ensurePlaylistCacheCoordinator()
+        playlistCacheCoordinator?.onPlaybackActive(slides, contentRevision, currentIndex)
     }
 
     private suspend fun readCachedPlaybackOnly(deviceId: String): MainUiState.Playback? = withContext(Dispatchers.IO) {
@@ -1316,6 +1324,21 @@ class MainViewModel(
         }
     }
 
+    private fun buildMediaCacheTelemetrySnapshot(): JsonObject? {
+        val playback = _state.value as? MainUiState.Playback ?: return null
+        if (playback.playbackDisabledByAdmin || playback.slides.isEmpty()) {
+            return null
+        }
+        return runCatching {
+            PlaylistCacheStatus.snapshot(
+                app = getApplication(),
+                slides = playback.slides,
+                contentRevision = playback.contentRevision,
+                warming = playlistCacheCoordinator?.isWarming() == true,
+            )
+        }.getOrNull()
+    }
+
     private fun startDeviceTelemetryLoop(deviceId: String) {
         telemetryDeviceId = deviceId
         telemetryJob?.cancel()
@@ -1327,6 +1350,7 @@ class MainViewModel(
                             DeviceTelemetryCollector.buildPayload(
                                 getApplication(),
                                 lastContentRevision.get(),
+                                mediaCache = buildMediaCacheTelemetrySnapshot(),
                             )
                         }.getOrNull()
                     if (payload != null) {
@@ -1463,6 +1487,8 @@ class MainViewModel(
         telemetryDeviceId = null
         playbackRealtime?.disconnect()
         playbackRealtime = null
+        playlistCacheCoordinator?.cancelAll()
+        playlistCacheCoordinator = null
         signageExo?.release()
         signageExo = null
         viewModelScope.launch {
@@ -1501,6 +1527,8 @@ class MainViewModel(
         playbackHealthMonitorJob?.cancel()
         playbackRealtime?.disconnect()
         playbackRealtime = null
+        playlistCacheCoordinator?.cancelAll()
+        playlistCacheCoordinator = null
         signageExo?.release()
         signageExo = null
     }

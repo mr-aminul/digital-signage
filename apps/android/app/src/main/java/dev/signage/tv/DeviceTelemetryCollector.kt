@@ -32,6 +32,7 @@ object DeviceTelemetryCollector {
     suspend fun buildPayload(
         application: Application,
         contentRevision: String?,
+        mediaCache: JsonObject? = null,
     ): JsonObject = withContext(Dispatchers.Default) {
         @Suppress("DEPRECATION")
         val pkg = runCatching { application.packageManager.getPackageInfo(application.packageName, 0) }.getOrNull()
@@ -164,6 +165,7 @@ object DeviceTelemetryCollector {
             put("jvm_max_heap_mb", maxHeapMb)
             put("settings_android_id", androidId)
             contentRevision?.let { put("content_revision", it) }
+            mediaCache?.let { put("media_cache", it) }
         }
     }
 

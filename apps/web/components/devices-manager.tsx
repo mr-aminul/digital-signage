@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useConsoleDataStore } from "@/stores/console-data-store";
 import { deviceTelemetrySummaryLine } from "@/components/device-telemetry-panel";
+import { DeviceMediaCacheChip } from "@/components/device-media-cache-chip";
 import { DeviceAppVersionChip } from "@/components/device-app-version-chip";
 import { useActiveAppRelease, type ActiveAppRelease } from "@/hooks/use-active-app-release";
 import { deviceAppUpdateStatus, getDeviceInstalledApp } from "@/lib/device-app-version";
@@ -380,6 +381,9 @@ function DeviceCard({
             {deviceSummary}
           </p>
         )}
+        <div className="mt-1.5">
+          <DeviceMediaCacheChip device={device} compact />
+        </div>
       </div>
       <div className="relative z-[1] flex flex-1 flex-col gap-3 p-3 pointer-events-none">
         <p className="truncate font-mono text-[0.625rem] text-muted-foreground" title={device.id}>
@@ -446,6 +450,9 @@ function DeviceListRow({
               {deviceSummary}
             </p>
           )}
+          <div className="mt-1">
+            <DeviceMediaCacheChip device={device} compact />
+          </div>
         </div>
       </div>
 
