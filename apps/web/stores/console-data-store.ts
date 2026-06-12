@@ -19,6 +19,7 @@ type ConsoleDataState = {
 type ConsoleDataActions = {
   setOwnerId: (id: string | null) => void;
   applySnapshot: (ownerId: string, snapshot: ConsoleSnapshot, syncedAt: number) => void;
+  patchDevice: (deviceId: string, patch: Partial<DeviceWithAssignments>) => void;
   setSyncing: (v: boolean) => void;
   setSyncError: (msg: string | null) => void;
   reset: () => void;
@@ -50,6 +51,12 @@ export const useConsoleDataStore = create<ConsoleDataState & ConsoleDataActions>
           lastSyncedAt: syncedAt,
           syncError: null,
         }),
+      patchDevice: (deviceId, patch) =>
+        set((s) => ({
+          devices: s.devices.map((device) =>
+            device.id === deviceId ? { ...device, ...patch } : device,
+          ),
+        })),
       setSyncing: (isSyncing) => set({ isSyncing }),
       setSyncError: (syncError) => set({ syncError }),
       reset: () => set(emptyState()),

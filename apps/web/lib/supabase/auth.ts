@@ -1,5 +1,6 @@
 import { cache } from "react";
 import type { User } from "@supabase/supabase-js";
+import type { Profile } from "@signage/types";
 import { getSupabaseServerClient } from "./server";
 
 /**
@@ -33,3 +34,33 @@ export const getServerAuth = cache(async (): Promise<{ supabase: Awaited<ReturnT
 
   return { supabase, user };
 });
+
+export const getServerAuthWithProfile = cache(
+  async (): Promise<{
+    supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>;
+    user: User | null;
+    profile: Profile | null;
+  }> => {
+    const supabase = getSupabaseServerClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return { supabase, user: null, profile: null };
+    }
+
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("id, full_name, created_at, is_disabled")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (error) {
+      console.warn("[getServerAuthWithProfile]", error.message);
+    }
+
+    return { supabase, user, profile: (profile as Profile | null) ?? null };
+  },
+);

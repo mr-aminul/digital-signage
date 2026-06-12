@@ -36,6 +36,8 @@ export const config = {
     "/dashboard/:path*",
     "/profile/:path*",
     "/settings/:path*",
+    "/admin/:path*",
+    "/account-suspended",
     "/login",
     "/signup",
     "/forgot-password",

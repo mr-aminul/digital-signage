@@ -4,6 +4,8 @@ import { Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
+import { playlistDetailPath, useAdminClientRoutes } from "@/components/admin/admin-client-route-context";
+import { useOptionalAdminStaff } from "@/components/admin/admin-staff-context";
 import { useConsoleSync } from "@/components/console/console-sync-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,11 +20,15 @@ export function CreatePlaylistForm({
   variant?: "default" | "cta" | "empty";
 }) {
   const router = useRouter();
+  const adminRoutes = useAdminClientRoutes();
+  const adminStaff = useOptionalAdminStaff();
+  const readOnly = adminStaff != null && !adminStaff.canWrite;
   const { syncNow } = useConsoleSync();
   const [name, setName] = useState("New playlist");
   const [creating, setCreating] = useState(false);
 
   async function createPlaylist() {
+    if (readOnly) return;
     setCreating(true);
     try {
       const supabase = getSupabaseBrowserClient();
@@ -37,13 +43,17 @@ export function CreatePlaylistForm({
       }
       toast.success("Playlist created");
       await syncNow();
-      router.push(`/playlists/${data.id}`);
+      router.push(playlistDetailPath(data.id, adminRoutes));
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to create playlist";
       toast.error(message);
     } finally {
       setCreating(false);
     }
+  }
+
+  if (readOnly) {
+    return null;
   }
 
   if (variant === "cta") {

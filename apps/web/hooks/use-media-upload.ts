@@ -28,7 +28,7 @@ export function useMediaUpload(
       }
       setUploading(true);
       try {
-        const { uploaded, errors } = await uploadMediaFiles(files);
+        const { uploaded, errors } = await uploadMediaFiles(files, ownerId);
         for (const message of errors) {
           toast.error(message);
         }

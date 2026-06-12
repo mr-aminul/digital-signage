@@ -11,6 +11,39 @@ export interface Profile {
   id: string;
   full_name: string | null;
   created_at: string;
+  is_disabled?: boolean;
+}
+
+export interface PlatformStaff {
+  user_id: string;
+  email: string;
+  display_name: string | null;
+  role: "owner" | "operator" | "viewer";
+  is_active: boolean;
+  created_at: string;
+}
+
+/** Row returned by admin_list_admins() RPC. */
+export interface AdminDirectoryEntry {
+  user_id: string;
+  email: string;
+  display_name: string | null;
+  role: PlatformStaff["role"];
+  is_active: boolean;
+  created_at: string;
+}
+
+/** Row returned by admin_list_users() RPC. */
+export interface AdminUserDirectoryEntry {
+  id: string;
+  email: string;
+  full_name: string | null;
+  created_at: string;
+  device_count: number;
+  online_device_count: number;
+  is_disabled: boolean;
+  /** True when the account also has admin portal access. */
+  is_staff: boolean;
 }
 
 /** TV-reported diagnostics (varies by app version); see Android `DeviceTelemetryCollector`. */

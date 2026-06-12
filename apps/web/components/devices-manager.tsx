@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { deviceDetailPath, useAdminClientRoutes } from "@/components/admin/admin-client-route-context";
+import { useOptionalAdminStaff } from "@/components/admin/admin-staff-context";
 import { useConsoleSync } from "@/components/console/console-sync-provider";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +21,7 @@ import { useConsoleDataStore } from "@/stores/console-data-store";
 import { deviceTelemetrySummaryLine } from "@/components/device-telemetry-panel";
 import { DeviceMediaCacheChip } from "@/components/device-media-cache-chip";
 import { DeviceAppVersionChip } from "@/components/device-app-version-chip";
+import { DeviceDisabledBadge, isDevicePlaybackDisabled } from "@/components/device-disabled-notice";
 import { useActiveAppRelease, type ActiveAppRelease } from "@/hooks/use-active-app-release";
 import { deviceAppUpdateStatus, getDeviceInstalledApp } from "@/lib/device-app-version";
 
@@ -66,6 +69,8 @@ export function DevicesManager() {
   const activeAppRelease = useActiveAppRelease();
 
   const { syncNow } = useConsoleSync();
+  const adminStaff = useOptionalAdminStaff();
+  const readOnly = adminStaff != null && !adminStaff.canWrite;
 
   const [pairingCode, setPairingCode] = useState("");
   const [friendlyName, setFriendlyName] = useState("");
@@ -81,6 +86,7 @@ export function DevicesManager() {
   }, [syncNow]);
 
   async function linkDevice() {
+    if (readOnly) return;
     setLinking(true);
     try {
       const code = pairingCode.trim();
@@ -167,45 +173,55 @@ export function DevicesManager() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
-          <p className="mb-3 text-[0.6875rem] font-semibold uppercase tracking-wide text-muted-foreground">Link a screen</p>
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="pair-code" className="text-xs">
-                Pairing code
-              </Label>
-              <Input
-                id="pair-code"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={6}
-                value={pairingCode}
-                onChange={(e) => setPairingCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                placeholder="123456"
-                className="h-9 font-mono text-sm tracking-widest"
-              />
+        {!readOnly ? (
+          <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
+            <p className="mb-3 text-[0.6875rem] font-semibold uppercase tracking-wide text-muted-foreground">
+              Link a screen
+            </p>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="pair-code" className="text-xs">
+                  Pairing code
+                </Label>
+                <Input
+                  id="pair-code"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  value={pairingCode}
+                  onChange={(e) => setPairingCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="123456"
+                  className="h-9 font-mono text-sm tracking-widest"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="pair-name" className="text-xs">
+                  Display name
+                </Label>
+                <Input
+                  id="pair-name"
+                  value={friendlyName}
+                  onChange={(e) => setFriendlyName(e.target.value)}
+                  placeholder="Lobby screen"
+                  className="h-9 text-sm"
+                />
+              </div>
+              <Button
+                type="button"
+                className="h-10 w-full gap-2 font-semibold shadow-sm"
+                onClick={() => void linkDevice()}
+                disabled={linking}
+              >
+                <Tv className="h-4 w-4" strokeWidth={2.25} />
+                {linking ? "Linking…" : "Link device"}
+              </Button>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="pair-name" className="text-xs">
-                Display name
-              </Label>
-              <Input
-                id="pair-name"
-                value={friendlyName}
-                onChange={(e) => setFriendlyName(e.target.value)}
-                placeholder="Lobby screen"
-                className="h-9 text-sm"
-              />
-            </div>
-            <Button type="button" className="h-10 w-full gap-2 font-semibold shadow-sm" onClick={() => void linkDevice()} disabled={linking}>
-              <Tv className="h-4 w-4" strokeWidth={2.25} />
-              {linking ? "Linking…" : "Link device"}
-            </Button>
+            <p className="mt-3 text-[0.6875rem] leading-relaxed text-muted-foreground">
+              Enter the six-digit code from the TV after it signs in. List is cached locally—use Sync in the
+              header to refresh.
+            </p>
           </div>
-          <p className="mt-3 text-[0.6875rem] leading-relaxed text-muted-foreground">
-            Enter the six-digit code from the TV after it signs in. List is cached locally—use Sync in the header to refresh.
-          </p>
-        </div>
+        ) : null}
 
         <nav className="rounded-xl border border-border bg-muted/30 p-2" aria-label="Filter by status">
           <p className="mb-2 px-2 text-[0.6875rem] font-semibold uppercase tracking-wide text-muted-foreground">Status</p>
@@ -312,6 +328,7 @@ export function DevicesManager() {
                     key={device.id}
                     device={device}
                     activeAppRelease={activeAppRelease}
+                    canDelete={!readOnly}
                     onRequestDelete={() => setDevicePendingDelete(device)}
                   />
                 ))}
@@ -323,6 +340,7 @@ export function DevicesManager() {
                     key={device.id}
                     device={device}
                     activeAppRelease={activeAppRelease}
+                    canDelete={!readOnly}
                     onRequestDelete={() => setDevicePendingDelete(device)}
                   />
                 ))}
@@ -348,17 +366,20 @@ export function DevicesManager() {
 function DeviceCard({
   device,
   activeAppRelease,
+  canDelete = true,
   onRequestDelete,
 }: {
   device: Device;
   activeAppRelease: ActiveAppRelease | null;
+  canDelete?: boolean;
   onRequestDelete: () => void;
 }) {
+  const adminRoutes = useAdminClientRoutes();
   const deviceSummary = deviceTelemetrySummaryLine(device);
   return (
     <li className="relative flex flex-col overflow-hidden rounded-xl border border-border bg-background shadow-sm transition-shadow hover:shadow-md">
       <Link
-        href={`/devices/${device.id}`}
+        href={deviceDetailPath(device.id, adminRoutes)}
         className="absolute inset-0 z-0 rounded-xl ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label={`Open screen: ${device.name}`}
       />
@@ -368,7 +389,10 @@ function DeviceCard({
             <Tv className="h-6 w-6 text-foreground" strokeWidth={1.5} />
           </div>
           <div className="flex flex-col items-end gap-1">
-            <StatusBadge status={effectiveDeviceStatus(device)} />
+            <div className="flex flex-wrap justify-end gap-1">
+              <StatusBadge status={effectiveDeviceStatus(device)} />
+              {isDevicePlaybackDisabled(device) ? <DeviceDisabledBadge /> : null}
+            </div>
             <DeviceAppVersionChip device={device} activeRelease={activeAppRelease} compact />
           </div>
         </div>
@@ -392,26 +416,28 @@ function DeviceCard({
       </div>
       <div className="relative z-[2] flex items-center justify-between gap-2 border-t border-border bg-background px-3 py-2">
         <Link
-          href={`/devices/${device.id}`}
+          href={deviceDetailPath(device.id, adminRoutes)}
           className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "h-8 gap-1.5")}
         >
           <Settings className="h-3.5 w-3.5" aria-hidden />
           Settings
         </Link>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-8 gap-1 text-destructive hover:bg-destructive/10"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onRequestDelete();
-          }}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-          Remove
-        </Button>
+        {canDelete ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 gap-1 text-destructive hover:bg-destructive/10"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onRequestDelete();
+            }}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Remove
+          </Button>
+        ) : null}
       </div>
     </li>
   );
@@ -420,17 +446,20 @@ function DeviceCard({
 function DeviceListRow({
   device,
   activeAppRelease,
+  canDelete = true,
   onRequestDelete,
 }: {
   device: Device;
   activeAppRelease: ActiveAppRelease | null;
+  canDelete?: boolean;
   onRequestDelete: () => void;
 }) {
+  const adminRoutes = useAdminClientRoutes();
   const deviceSummary = deviceTelemetrySummaryLine(device);
   return (
     <li className="relative flex flex-row items-center justify-between gap-3 px-3 py-4 transition-colors hover:bg-muted/40">
       <Link
-        href={`/devices/${device.id}`}
+        href={deviceDetailPath(device.id, adminRoutes)}
         className="absolute inset-0 z-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         aria-label={`Open screen: ${device.name}`}
       />
@@ -442,6 +471,7 @@ function DeviceListRow({
           <div className="flex flex-wrap items-center gap-2">
             <p className="truncate text-sm font-semibold text-foreground">{device.name}</p>
             <StatusBadge status={effectiveDeviceStatus(device)} />
+            {isDevicePlaybackDisabled(device) ? <DeviceDisabledBadge /> : null}
             <DeviceAppVersionChip device={device} activeRelease={activeAppRelease} />
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">Last seen · {formatDeviceLastSeen(device.last_seen)}</p>
@@ -458,25 +488,27 @@ function DeviceListRow({
 
       <div className="relative z-[2] flex shrink-0 items-center gap-2">
         <Link
-          href={`/devices/${device.id}`}
+          href={deviceDetailPath(device.id, adminRoutes)}
           className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1.5")}
         >
           <Settings className="h-3.5 w-3.5" aria-hidden />
           Settings
         </Link>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="text-destructive hover:bg-destructive/10"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onRequestDelete();
-          }}
-        >
-          Remove
-        </Button>
+        {canDelete ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="text-destructive hover:bg-destructive/10"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onRequestDelete();
+            }}
+          >
+            Remove
+          </Button>
+        ) : null}
       </div>
     </li>
   );

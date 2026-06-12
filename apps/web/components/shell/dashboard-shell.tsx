@@ -3,8 +3,8 @@
 import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { ClientConsoleSyncProvider } from "@/components/console/client-console-sync-provider";
 import { ConsoleSyncButton } from "@/components/console/console-sync-button";
-import { ConsoleSyncProvider } from "@/components/console/console-sync-provider";
 import { AppLayout } from "./app-layout";
 import { DashboardRoutePrefetch } from "./dashboard-route-prefetch";
 import { NotificationsProvider } from "./notifications-context";
@@ -49,6 +49,7 @@ function DashboardShellInner({
   return (
     <AppLayout
       {...layoutConfig}
+      navItems={layoutConfig.navItems}
       getPageTitle={getPageTitle}
       userName={displayName}
       profileSubtext={userEmail}
@@ -64,23 +65,23 @@ function DashboardShellInner({
 
 export function DashboardShell({
   children,
-  userId,
+  authUserId,
   userEmail,
   displayName,
 }: {
   children: React.ReactNode;
-  userId: string;
+  authUserId: string;
   userEmail: string;
   displayName: string;
 }) {
   return (
     <SettingsProvider>
       <NotificationsProvider>
-        <ConsoleSyncProvider userId={userId}>
+        <ClientConsoleSyncProvider authUserId={authUserId}>
           <DashboardShellInner userEmail={userEmail} displayName={displayName}>
             {children}
           </DashboardShellInner>
-        </ConsoleSyncProvider>
+        </ClientConsoleSyncProvider>
       </NotificationsProvider>
     </SettingsProvider>
   );

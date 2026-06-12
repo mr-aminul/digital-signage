@@ -1,12 +1,18 @@
 import { redirect } from "next/navigation";
 import { DashboardShell } from "@/components/shell/dashboard-shell";
-import { getServerAuth } from "@/lib/supabase/auth";
+import { getServerAuthWithProfile } from "@/lib/supabase/auth";
+
+export const dynamic = "force-dynamic";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { user } = await getServerAuth();
+  const { user, profile } = await getServerAuthWithProfile();
 
   if (!user) {
     redirect("/login");
+  }
+
+  if (profile?.is_disabled) {
+    redirect("/account-suspended");
   }
 
   const meta = user.user_metadata as Record<string, string | undefined> | undefined;
@@ -14,7 +20,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const displayName = fullName || user.email?.split("@")[0] || "User";
 
   return (
-    <DashboardShell userId={user.id} userEmail={user.email ?? ""} displayName={displayName}>
+    <DashboardShell authUserId={user.id} userEmail={user.email ?? ""} displayName={displayName}>
       {children}
     </DashboardShell>
   );

@@ -106,7 +106,6 @@ export function AppLayout({
 
   return (
     <div className="dashboard-shell-root" style={outerStyle}>
-      {banner}
       <div
         style={{
           display: "flex",
@@ -156,6 +155,7 @@ export function AppLayout({
               flexDirection: "column",
             }}
           >
+            {banner}
             <main
               style={{
                 flex: 1,

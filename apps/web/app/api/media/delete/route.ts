@@ -1,26 +1,38 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { deleteMediaObject } from "@/lib/object-storage/server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getRouteHandlerStaffAuth } from "@/lib/auth/route-handler-staff";
+import { resolveDataOwnerId } from "@/lib/auth/resolve-data-owner";
 
 export const runtime = "nodejs";
 
 export async function DELETE(request: NextRequest) {
-  const supabase = getSupabaseServerClient();
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
+  const ctx = await getRouteHandlerStaffAuth();
+  if (!ctx.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (ctx.profile?.is_disabled && !ctx.staff) {
+    return NextResponse.json({ error: "Account suspended" }, { status: 403 });
+  }
 
-  let body: { id?: string; storagePath?: string };
+  let body: { id?: string; storagePath?: string; ownerId?: string };
   try {
-    body = (await request.json()) as { id?: string; storagePath?: string };
+    body = (await request.json()) as { id?: string; storagePath?: string; ownerId?: string };
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
+
+  const isStaff = ctx.staff != null;
+  const resolved = resolveDataOwnerId(
+    ctx.user.id,
+    ctx.staff,
+    isStaff ? body.ownerId : ctx.user.id,
+  );
+  if ("error" in resolved) {
+    return NextResponse.json({ error: resolved.error }, { status: resolved.status });
+  }
+
+  const { supabase } = ctx;
+  const effectiveOwnerId = resolved.ownerId;
 
   const mediaId = body.id?.trim();
   const storagePath = body.storagePath?.trim();
@@ -37,12 +49,12 @@ export async function DELETE(request: NextRequest) {
   if (fetchError) {
     return NextResponse.json({ error: fetchError.message }, { status: 500 });
   }
-  if (!row || row.owner_id !== user.id || row.storage_path !== storagePath) {
+  if (!row || row.owner_id !== effectiveOwnerId || row.storage_path !== storagePath) {
     return NextResponse.json({ error: "Media not found" }, { status: 404 });
   }
 
   try {
-    await deleteMediaObject(user.id, storagePath);
+    await deleteMediaObject(effectiveOwnerId, storagePath);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Delete from object storage failed";
     return NextResponse.json({ error: message }, { status: 503 });

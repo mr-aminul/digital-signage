@@ -21,6 +21,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useConsoleSync } from "@/components/console/console-sync-provider";
+import { useOptionalAdminStaff } from "@/components/admin/admin-staff-context";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { ensureMediaVideoDuration } from "@/lib/media";
 import { getMediaPublicBaseUrl, mediaPublicUrl } from "@/lib/object-storage/urls";
@@ -66,6 +67,8 @@ interface PlaylistEditorProps {
 
 export function PlaylistEditor({ playlistId, initialName }: PlaylistEditorProps) {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
+  const adminStaff = useOptionalAdminStaff();
+  const readOnly = adminStaff != null && !adminStaff.canWrite;
   const ownerId = useConsoleDataStore((s) => s.ownerId);
   const { syncNow } = useConsoleSync();
   const cachedItems = useConsoleDataStore(
@@ -102,6 +105,7 @@ export function PlaylistEditor({ playlistId, initialName }: PlaylistEditorProps)
   }, [allMedia, librarySearch]);
 
   const saveName = useCallback(async () => {
+    if (readOnly) return;
     const trimmed = name.trim();
     if (!trimmed) {
       toast.error("Enter a playlist name.");
@@ -127,7 +131,7 @@ export function PlaylistEditor({ playlistId, initialName }: PlaylistEditorProps)
     } finally {
       setSavingName(false);
     }
-  }, [initialName, name, playlistId, reloadFromServer, supabase]);
+  }, [initialName, name, playlistId, readOnly, reloadFromServer, supabase]);
 
   const cancelEditingName = useCallback(() => {
     setName(initialName);
@@ -136,6 +140,7 @@ export function PlaylistEditor({ playlistId, initialName }: PlaylistEditorProps)
 
   const persistOrder = useCallback(
     async (next: PlaylistItemWithMedia[]) => {
+      if (readOnly) return;
       const updates = next.map((item, index) =>
         supabase.from("playlist_items").update({ sort_order: index }).eq("id", item.id),
       );
@@ -148,11 +153,12 @@ export function PlaylistEditor({ playlistId, initialName }: PlaylistEditorProps)
       }
       await reloadFromServer();
     },
-    [reloadFromServer, supabase],
+    [readOnly, reloadFromServer, supabase],
   );
 
   const addMediaAtIndex = useCallback(
     async (mediaId: string, destIndex: number) => {
+      if (readOnly) return;
       const sortLen = useConsoleDataStore.getState().playlistItemsByPlaylistId[playlistId]?.length ?? 0;
       const mediaRow =
         allMedia.find((m) => m.id === mediaId) ??
@@ -188,11 +194,12 @@ export function PlaylistEditor({ playlistId, initialName }: PlaylistEditorProps)
         await persistOrder(fresh);
       }
     },
-    [allMedia, persistOrder, playlistId, reloadFromServer, supabase],
+    [allMedia, persistOrder, playlistId, readOnly, reloadFromServer, supabase],
   );
 
   const removeItem = useCallback(
     async (id: string) => {
+      if (readOnly) return;
       const { error } = await supabase.from("playlist_items").delete().eq("id", id);
       if (error) {
         toast.error(error.message);
@@ -201,11 +208,12 @@ export function PlaylistEditor({ playlistId, initialName }: PlaylistEditorProps)
       toast.success("Removed from playlist");
       await reloadFromServer();
     },
-    [reloadFromServer, supabase],
+    [readOnly, reloadFromServer, supabase],
   );
 
   const updateDuration = useCallback(
     async (id: string, duration: number) => {
+      if (readOnly) return;
       const { error } = await supabase.from("playlist_items").update({ duration_seconds: duration }).eq("id", id);
       if (error) {
         toast.error(error.message);
@@ -213,20 +221,22 @@ export function PlaylistEditor({ playlistId, initialName }: PlaylistEditorProps)
       }
       await reloadFromServer();
     },
-    [reloadFromServer, supabase],
+    [readOnly, reloadFromServer, supabase],
   );
 
   const persistVideoMediaDuration = useCallback(
     async (mediaId: string, seconds: number) => {
+      if (readOnly) return;
       const { error } = await supabase.from("media").update({ duration_seconds: seconds }).eq("id", mediaId);
       if (error) return;
       await reloadFromServer();
     },
-    [reloadFromServer, supabase],
+    [readOnly, reloadFromServer, supabase],
   );
 
   const onDragEnd = useCallback(
     async (result: DropResult) => {
+      if (readOnly) return;
       const { destination, source, draggableId } = result;
       if (!destination) {
         if (draggableId.startsWith("media-")) setLibraryResetKey((k) => k + 1);
@@ -262,7 +272,7 @@ export function PlaylistEditor({ playlistId, initialName }: PlaylistEditorProps)
         await persistOrder(next);
       }
     },
-    [addMediaAtIndex, items, persistOrder, removeItem],
+    [addMediaAtIndex, items, persistOrder, readOnly, removeItem],
   );
 
   const addUploadedToPlaylist = useCallback(
@@ -294,19 +304,21 @@ export function PlaylistEditor({ playlistId, initialName }: PlaylistEditorProps)
               <h1 className="min-w-0 w-fit max-w-full text-balance text-2xl font-semibold tracking-tight text-foreground leading-snug">
                 <span className="break-words [overflow-wrap:anywhere]">{initialName}</span>
               </h1>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="inline-flex h-8 w-8 shrink-0 p-0 text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  setName(initialName);
-                  setIsEditingName(true);
-                }}
-                aria-label="Edit playlist name"
-              >
-                <Pencil className="h-4 w-4" strokeWidth={2} />
-              </Button>
+              {!readOnly ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="inline-flex h-8 w-8 shrink-0 p-0 text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    setName(initialName);
+                    setIsEditingName(true);
+                  }}
+                  aria-label="Edit playlist name"
+                >
+                  <Pencil className="h-4 w-4" strokeWidth={2} />
+                </Button>
+              ) : null}
             </div>
           ) : (
             <div className="flex min-w-0 max-w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
@@ -474,7 +486,10 @@ export function PlaylistEditor({ playlistId, initialName }: PlaylistEditorProps)
                                           className="h-9 w-full min-w-0 text-sm tabular-nums"
                                           key={`d-${item.id}-${item.duration_seconds}`}
                                           defaultValue={item.duration_seconds ?? 10}
+                                          readOnly={readOnly}
+                                          disabled={readOnly}
                                           onBlur={(e) => {
+                                            if (readOnly) return;
                                             const raw = e.target.value.trim();
                                             const value = Number(raw);
                                             const nextValue =
@@ -486,16 +501,18 @@ export function PlaylistEditor({ playlistId, initialName }: PlaylistEditorProps)
                                     )}
                                   </div>
                                   <div className="flex justify-end">
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-9 w-9 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                      onClick={() => void removeItem(item.id)}
-                                      aria-label="Remove clip"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
+                                    {!readOnly ? (
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-9 w-9 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                        onClick={() => void removeItem(item.id)}
+                                        aria-label="Remove clip"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    ) : null}
                                   </div>
                                 </div>
                               </div>
@@ -512,7 +529,7 @@ export function PlaylistEditor({ playlistId, initialName }: PlaylistEditorProps)
           </div>
         </div>
 
-      {ownerId ? (
+      {ownerId && !readOnly ? (
         <PlaylistAssetsPanel
           ownerId={ownerId}
           droppableId="playlist-library"

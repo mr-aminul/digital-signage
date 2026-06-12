@@ -7,6 +7,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { playlistDetailPath, useAdminClientRoutes } from "@/components/admin/admin-client-route-context";
+import { useOptionalAdminStaff } from "@/components/admin/admin-staff-context";
 import { useConsoleSync } from "@/components/console/console-sync-provider";
 import { CreatePlaylistForm } from "@/components/create-playlist-form";
 import { Button } from "@/components/ui/button";
@@ -19,6 +21,10 @@ import { useConsoleDataStore } from "@/stores/console-data-store";
 export function PlaylistsWorkspace({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const adminRoutes = useAdminClientRoutes();
+  const adminStaff = useOptionalAdminStaff();
+  const readOnly = adminStaff != null && !adminStaff.canWrite;
+  const playlistsHomePath = adminRoutes?.playlistsPath ?? "/playlists";
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const { syncNow } = useConsoleSync();
   const ownerId = useConsoleDataStore((s) => s.ownerId);
@@ -112,23 +118,27 @@ export function PlaylistsWorkspace({ children }: { children: React.ReactNode }) 
           </div>
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
-          <p className="mb-3 text-[0.6875rem] font-semibold uppercase tracking-wide text-muted-foreground">New playlist</p>
-          <CreatePlaylistForm ownerId={ownerId} variant="cta" />
-          <p className="mt-3 text-[0.6875rem] leading-relaxed text-muted-foreground">
-            Opens the editor right away. Name it on the right, then drag media from your library.
-          </p>
-        </div>
+        {!readOnly ? (
+          <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
+            <p className="mb-3 text-[0.6875rem] font-semibold uppercase tracking-wide text-muted-foreground">
+              New playlist
+            </p>
+            <CreatePlaylistForm ownerId={ownerId} variant="cta" />
+            <p className="mt-3 text-[0.6875rem] leading-relaxed text-muted-foreground">
+              Opens the editor right away. Name it on the right, then drag media from your library.
+            </p>
+          </div>
+        ) : null}
 
         <nav className="rounded-xl border border-border bg-muted/30 p-2" aria-label="Playlist library">
           <p className="mb-2 px-2 text-[0.6875rem] font-semibold uppercase tracking-wide text-muted-foreground">Library</p>
           <ul className="space-y-0.5">
             <li>
               <Link
-                href="/playlists"
+                href={playlistsHomePath}
                 className={cn(
                   "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors",
-                  pathname === "/playlists"
+                  pathname === playlistsHomePath
                     ? "bg-card text-foreground shadow-sm ring-1 ring-border"
                     : "text-muted-foreground hover:bg-muted/80 hover:text-foreground",
                 )}
@@ -171,7 +181,7 @@ export function PlaylistsWorkspace({ children }: { children: React.ReactNode }) 
                       )}
                     >
                       <Link
-                        href={`/playlists/${p.id}`}
+                        href={playlistDetailPath(p.id, adminRoutes)}
                         className="flex min-w-0 flex-1 items-start gap-2.5 rounded-lg px-2.5 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       >
                         <span
@@ -189,16 +199,18 @@ export function PlaylistsWorkspace({ children }: { children: React.ReactNode }) 
                           </span>
                         </span>
                       </Link>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="mr-1 h-8 shrink-0 px-2 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
-                        aria-label={`Delete playlist “${p.name}”`}
-                        onClick={() => setPlaylistPendingDelete(p)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      {!readOnly ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="mr-1 h-8 shrink-0 px-2 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
+                          aria-label={`Delete playlist “${p.name}”`}
+                          onClick={() => setPlaylistPendingDelete(p)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      ) : null}
                     </li>
                   );
                 })}

@@ -2,7 +2,7 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseConnectEnv } from "./env";
 
-const PROTECTED_PREFIXES = ["/devices", "/playlists", "/media", "/dashboard", "/profile", "/settings"];
+const PROTECTED_PREFIXES = ["/devices", "/playlists", "/media", "/dashboard", "/profile", "/settings", "/admin"];
 
 export function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PREFIXES.some(
@@ -80,8 +80,38 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     return NextResponse.redirect(redirectUrl);
   }
 
+  if (userId) {
+    const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/");
+
+    if (isAdminRoute) {
+      const { data: staffRow } = await supabase
+        .from("platform_staff")
+        .select("user_id")
+        .eq("user_id", userId)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (!staffRow) {
+        return NextResponse.redirect(new URL("/dashboard", request.url));
+      }
+    } else if (isProtectedPath(pathname) && pathname !== "/account-suspended") {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("is_disabled")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (profile?.is_disabled) {
+        return NextResponse.redirect(new URL("/account-suspended", request.url));
+      }
+    }
+  }
+
   if ((pathname === "/login" || pathname === "/signup") && userId) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    const next = request.nextUrl.searchParams.get("next");
+    const safeNext =
+      next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+    return NextResponse.redirect(new URL(safeNext, request.url));
   }
 
   return response;

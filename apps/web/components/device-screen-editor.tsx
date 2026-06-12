@@ -32,6 +32,7 @@ import { PlaylistAssetsPanel } from "@/components/playlist-assets-panel";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useConsoleDataStore } from "@/stores/console-data-store";
 import { DevicePlaybackToggle } from "@/components/device-playback-toggle";
+import { DeviceDisabledNotice, isDevicePlaybackDisabled } from "@/components/device-disabled-notice";
 import { DeviceScreenOrientationSettings } from "@/components/device-screen-orientation-settings";
 import { PlaylistPreviewButton } from "@/components/playlist-preview";
 import { ReadonlyVideoDuration } from "@/components/readonly-video-duration";
@@ -87,9 +88,18 @@ function ScreenStatusBadge({ status }: { status: DeviceStatus }) {
 interface DeviceScreenEditorProps {
   deviceId: string;
   ownerId: string;
+  /** Playlist picker, assignment, and clip editor. */
+  canManageTvPlaylist?: boolean;
+  /** Pause/resume TV playback — platform admins only (RLS-enforced). */
+  canControlPlayback?: boolean;
 }
 
-export function DeviceScreenEditor({ deviceId, ownerId }: DeviceScreenEditorProps) {
+export function DeviceScreenEditor({
+  deviceId,
+  ownerId,
+  canManageTvPlaylist = true,
+  canControlPlayback = false,
+}: DeviceScreenEditorProps) {
   useStaleOnlineTick();
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const { syncNow } = useConsoleSync();
@@ -100,6 +110,12 @@ export function DeviceScreenEditor({ deviceId, ownerId }: DeviceScreenEditorProp
     () => storeDevices.find((d) => d.id === deviceId),
     [storeDevices, deviceId],
   );
+  const deviceDisabled = device ? isDevicePlaybackDisabled(device) : false;
+
+  useEffect(() => {
+    void syncNow();
+  }, [deviceId, syncNow]);
+
   const playlists = useConsoleDataStore((s) => s.playlists);
   const allMedia = useConsoleDataStore((s) => s.media) as Media[];
 
@@ -483,6 +499,8 @@ export function DeviceScreenEditor({ deviceId, ownerId }: DeviceScreenEditorProp
 
   return (
     <div className="space-y-6">
+      {deviceDisabled ? <DeviceDisabledNotice canControlPlayback={canControlPlayback} /> : null}
+
       <div className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
             <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto">
@@ -606,7 +624,7 @@ export function DeviceScreenEditor({ deviceId, ownerId }: DeviceScreenEditorProp
             </div>
 
             <div className="flex w-full shrink-0 flex-wrap justify-start gap-2 border-t border-border pt-6 lg:w-auto lg:self-center lg:justify-end lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
-              <DevicePlaybackToggle device={device} />
+              {canControlPlayback ? <DevicePlaybackToggle device={device} /> : null}
               <DeviceScreenOrientationSettings device={device} />
               <DeviceTelemetryMoreButton device={device} />
             </div>
@@ -615,14 +633,38 @@ export function DeviceScreenEditor({ deviceId, ownerId }: DeviceScreenEditorProp
 
       <DeviceAppUpdateNotice device={device} activeRelease={activeAppRelease} />
 
-      {device.playback_disabled ? (
-        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-950 dark:text-amber-100">
-          Playlist playback is paused for this screen. The TV shows the app logo and “Device disabled by admin” until you
-          choose <span className="font-medium">Resume playlist on TV</span>.
-        </div>
-      ) : null}
-
-      {!playlistId ? (
+      {!canManageTvPlaylist ? (
+        <section className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm dark:bg-card">
+          <div className="border-b border-border bg-muted/30 px-4 py-4 sm:px-5">
+            <div className="space-y-1.5">
+              <h2 className="text-lg font-semibold tracking-tight text-foreground">Playlist on this screen</h2>
+              {playlistId ? (
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  Assigned playlist:{" "}
+                  <span className="font-medium text-foreground">{activePlaylistName ?? "Untitled playlist"}</span>{" "}
+                  ({items.length} {items.length === 1 ? "item" : "items"}, {playlistTimingLabel}). Contact your OneSign
+                  administrator to change what plays on this TV.
+                </p>
+              ) : (
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  No playlist is assigned yet. Your OneSign administrator will choose what plays on this TV.
+                </p>
+              )}
+            </div>
+          </div>
+          {playlistId && items.length > 0 ? (
+            <div className="px-4 py-4 sm:px-5">
+              <div className="flex flex-wrap items-center gap-2">
+                <PlaylistPreviewButton
+                  items={items}
+                  playlistName={activePlaylistName}
+                  frame={{ kind: "device", displayPx: deviceDisplayPxForPreview }}
+                />
+              </div>
+            </div>
+          ) : null}
+        </section>
+      ) : !playlistId ? (
         <section className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm dark:bg-card">
           <div className="border-b border-border bg-muted/30 px-4 py-4 sm:px-5">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
