@@ -14,6 +14,7 @@ import { NavRadialSpinner } from "@/components/ui/nav-radial-spinner";
 import { assets } from "@/lib/config/assets";
 import { ConfirmModal } from "./confirm-modal";
 import { shellChrome } from "./shell-chrome";
+import { TrialTopBarPill } from "@/components/console/trial-status";
 
 function formatNotificationTime(ts: number) {
   const d = new Date(ts);
@@ -738,6 +739,7 @@ export function TopBar({
         {rightSlot ?? (
           <>
             {searchPlaceholder != null && <ExpandableSearch placeholder={searchPlaceholder} />}
+            <TrialTopBarPill />
             {syncControl}
             <NotificationBellDropdown />
             <ProfileDropdown
@@ -809,6 +811,7 @@ export function TopBar({
         {rightSlot ?? (
           <>
             {searchPlaceholder != null && <ExpandableSearch placeholder={searchPlaceholder} />}
+            <TrialTopBarPill />
             {syncControl}
             <NotificationBellDropdown />
             <ProfileDropdown

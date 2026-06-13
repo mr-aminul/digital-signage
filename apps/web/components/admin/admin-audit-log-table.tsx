@@ -206,7 +206,7 @@ export function AdminAuditLogTable({
                   <td colSpan={showClientColumn ? 5 : 4} className="px-4 py-12 text-center">
                     <p className="text-sm font-medium text-foreground">No activity recorded yet</p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Plan changes, suspensions, invitations, and waitlist reviews appear here.
+                      Plan changes, suspensions, invitations, and trial updates appear here.
                     </p>
                   </td>
                 </tr>

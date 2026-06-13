@@ -45,6 +45,7 @@ export async function inviteAuthUser(
     redirectTo: input.redirectTo,
     data: {
       full_name: clientName,
+      skip_trial: "true",
     },
   });
 
@@ -81,6 +82,7 @@ export async function inviteAuthUser(
       redirectTo: input.redirectTo,
       data: {
         full_name: clientName ?? existing.user_metadata?.full_name ?? undefined,
+        skip_trial: "true",
       },
     },
   );

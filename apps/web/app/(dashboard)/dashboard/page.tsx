@@ -15,6 +15,7 @@ import { getMediaPublicBaseUrl } from "@/lib/object-storage/urls";
 import { cn } from "@/lib/utils";
 import { useConsoleDataStore } from "@/stores/console-data-store";
 import { usePlanQuota } from "@/components/console/plan-quota-context";
+import { TrialHomeCard } from "@/components/console/trial-status";
 import { PlanUsageSummary } from "@/components/plan/plan-usage-meter";
 
 function activePlaylistRow(device: DeviceWithAssignments) {
@@ -194,6 +195,8 @@ export default function DashboardHomePage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 pb-4">
+      <TrialHomeCard />
+
       {plan ? (
         <section className="space-y-2">
           <div className="flex flex-wrap items-end justify-between gap-2">

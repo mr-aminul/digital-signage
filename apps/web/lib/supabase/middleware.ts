@@ -102,21 +102,33 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
           return NextResponse.redirect(new URL("/dashboard", request.url));
         }
       }
-    } else if (isProtectedPath(pathname) && pathname !== "/account-suspended") {
+    } else if (isProtectedPath(pathname) && pathname !== "/account-suspended" && pathname !== "/trial-expired") {
       const jwtDisabled = jwtAppMetadataFlag(appMetadata, "is_disabled");
       if (jwtDisabled === true) {
         return NextResponse.redirect(new URL("/account-suspended", request.url));
       }
 
-      if (jwtDisabled === undefined) {
+      const jwtTrialExpired = jwtAppMetadataFlag(appMetadata, "trial_expired");
+      if (jwtTrialExpired === true) {
+        return NextResponse.redirect(new URL("/trial-expired", request.url));
+      }
+
+      if (jwtDisabled === undefined || jwtTrialExpired === undefined) {
         const { data: profile } = await supabase
           .from("profiles")
-          .select("is_disabled")
+          .select("is_disabled, trial_ends_at")
           .eq("id", userId)
           .maybeSingle();
 
         if (profile?.is_disabled) {
           return NextResponse.redirect(new URL("/account-suspended", request.url));
+        }
+
+        if (
+          profile?.trial_ends_at &&
+          Date.now() > new Date(profile.trial_ends_at).getTime()
+        ) {
+          return NextResponse.redirect(new URL("/trial-expired", request.url));
         }
       }
     }

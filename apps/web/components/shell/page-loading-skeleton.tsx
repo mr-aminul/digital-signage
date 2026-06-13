@@ -83,10 +83,12 @@ export function PageLoadingSkeleton({
 export function NavigationProgressBar() {
   return (
     <div
-      className="pointer-events-none absolute inset-x-0 top-0 z-10 h-0.5 overflow-hidden"
+      className="pointer-events-none fixed inset-x-0 top-0 z-[9999] h-[2px] overflow-hidden"
+      role="progressbar"
+      aria-valuetext="Loading page"
       aria-hidden
     >
-      <div className="navigation-progress-bar h-full w-1/3 bg-brand-strong" />
+      <div className="navigation-progress-bar h-full w-1/3 bg-brand" />
     </div>
   );
 }

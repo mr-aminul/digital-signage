@@ -41,6 +41,28 @@ async function lookupLinkedUserId(admin: SupabaseClient, googleSub: string): Pro
   return data?.user_id ?? null;
 }
 
+async function createGoogleUser(
+  admin: SupabaseClient,
+  input: GoogleBridgeInput,
+): Promise<string> {
+  const email = input.email.trim().toLowerCase();
+  const { data, error } = await admin.auth.admin.createUser({
+    email,
+    email_confirm: true,
+    user_metadata: {
+      full_name: input.name?.trim() || undefined,
+      avatar_url: input.image || undefined,
+    },
+  });
+
+  if (error || !data.user?.id) {
+    throw new GoogleBridgeError(error?.message ?? "Could not create your account.");
+  }
+
+  await linkGoogleIdentity(admin, input.googleSub.trim(), data.user.id);
+  return data.user.id;
+}
+
 export async function bridgeGoogleUserToSupabase(input: GoogleBridgeInput): Promise<string> {
   const admin = getSupabaseAdminClient();
   const email = input.email.trim();
@@ -57,7 +79,5 @@ export async function bridgeGoogleUserToSupabase(input: GoogleBridgeInput): Prom
     return existingUserId;
   }
 
-  throw new GoogleBridgeError(
-    "No account found for this Google email. Ask your administrator for an invitation.",
-  );
+  return createGoogleUser(admin, input);
 }

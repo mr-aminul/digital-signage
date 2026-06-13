@@ -1,5 +1,0 @@
-import { PageContentLoading } from "@/components/shell/page-content-loading";
-
-export default function DashboardLoading() {
-  return <PageContentLoading label="Loading page…" />;
-}

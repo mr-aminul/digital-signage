@@ -6,6 +6,7 @@ import { useAppRouter } from "@/hooks/use-app-router";
 import { toast } from "sonner";
 import { ClientConsoleSyncProvider } from "@/components/console/client-console-sync-provider";
 import { ConsoleSyncButton } from "@/components/console/console-sync-button";
+import { TrialStrip } from "@/components/console/trial-status";
 import { AppLayout } from "./app-layout";
 import { DashboardRoutePrefetch } from "./dashboard-route-prefetch";
 import { NotificationsProvider } from "./notifications-context";
@@ -71,6 +72,7 @@ function DashboardShellInner({
       }
       searchPlaceholder="Search..."
       topBarSyncControl={<ConsoleSyncButton />}
+      banner={<TrialStrip />}
     >
       <DashboardRoutePrefetch paths={prefetchPaths} />
       {children}

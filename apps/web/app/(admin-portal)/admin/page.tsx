@@ -1,5 +1,5 @@
-import type { AccessWaitlistEntry, AdminDirectoryStats, AdminUserDirectoryEntry } from "@signage/types";
-import { Inbox, Monitor, Users } from "lucide-react";
+import type { AdminDirectoryStats, AdminUserDirectoryEntry } from "@signage/types";
+import { Clock3, Monitor, Users } from "lucide-react";
 import { AdminOverviewSections } from "@/components/admin/admin-overview-sections";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getServerStaffAuth } from "@/lib/auth/staff";
@@ -37,18 +37,13 @@ export default async function AdminOverviewPage({
   const search = searchParams.q?.trim() || null;
   const offset = (page - 1) * PAGE_SIZE;
 
-  const [statsResult, listResult, waitlistResult] = await Promise.all([
+  const [statsResult, listResult] = await Promise.all([
     ctx.supabase.rpc("admin_directory_stats"),
     ctx.supabase.rpc("admin_list_users", {
       p_limit: PAGE_SIZE,
       p_offset: offset,
       p_search: search,
       p_status: status,
-    }),
-    ctx.supabase.rpc("admin_list_waitlist", {
-      p_limit: 50,
-      p_offset: 0,
-      p_status: "all",
     }),
   ]);
 
@@ -58,9 +53,6 @@ export default async function AdminOverviewPage({
   if (listResult.error) {
     throw new Error(listResult.error.message);
   }
-  if (waitlistResult.error) {
-    throw new Error(waitlistResult.error.message);
-  }
 
   const statsRows = (statsResult.data as AdminDirectoryStats[]) ?? [];
   const stats = statsRows[0] ?? {
@@ -68,12 +60,12 @@ export default async function AdminOverviewPage({
     device_count: 0,
     online_device_count: 0,
     disabled_count: 0,
-    pending_waitlist_count: 0,
+    active_trial_count: 0,
+    expired_trial_count: 0,
   };
 
   const users = (listResult.data as AdminUserDirectoryEntry[]) ?? [];
   const totalCount = users[0]?.total_count ?? users.length;
-  const waitlistEntries = (waitlistResult.data as AccessWaitlistEntry[]) ?? [];
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 pb-4">
@@ -134,30 +126,29 @@ export default async function AdminOverviewPage({
           <CardHeader className="space-y-2 pb-2">
             <div className="flex items-center gap-2.5">
               <div className="rounded-lg bg-muted/60 p-2">
-                <Users className="h-4 w-4 text-red-600" aria-hidden />
+                <Clock3 className="h-4 w-4 text-amber-600" aria-hidden />
               </div>
-              <CardTitle className="text-base">Disabled</CardTitle>
+              <CardTitle className="text-base">Active trials</CardTitle>
             </div>
-            <CardDescription>Suspended client accounts</CardDescription>
+            <CardDescription>Self-serve signups still in trial</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-semibold tabular-nums">{stats.disabled_count}</p>
+            <p className="text-3xl font-semibold tabular-nums">{stats.active_trial_count ?? 0}</p>
           </CardContent>
         </Card>
+
         <Card className="border-border/90 shadow-sm">
           <CardHeader className="space-y-2 pb-2">
             <div className="flex items-center gap-2.5">
               <div className="rounded-lg bg-muted/60 p-2">
-                <Inbox className="h-4 w-4 text-amber-600" aria-hidden />
+                <Users className="h-4 w-4 text-red-600" aria-hidden />
               </div>
-              <CardTitle className="text-base">Waitlist</CardTitle>
+              <CardTitle className="text-base">Expired trials</CardTitle>
             </div>
-            <CardDescription>Pending access applications</CardDescription>
+            <CardDescription>Need upgrade or extension</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-semibold tabular-nums">
-              {stats.pending_waitlist_count ?? waitlistEntries.length}
-            </p>
+            <p className="text-3xl font-semibold tabular-nums">{stats.expired_trial_count ?? 0}</p>
           </CardContent>
         </Card>
       </div>
@@ -169,8 +160,6 @@ export default async function AdminOverviewPage({
         totalCount={totalCount}
         initialQuery={search ?? ""}
         initialStatus={status}
-        waitlistEntries={waitlistEntries}
-        pendingWaitlistCount={stats.pending_waitlist_count ?? 0}
       />
     </div>
   );

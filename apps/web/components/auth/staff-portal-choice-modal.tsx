@@ -69,7 +69,7 @@ export function StaffPortalChoiceModal({ onChooseUser }: StaffPortalChoiceModalP
             <span className="min-w-0">
               <span className="block text-sm font-semibold text-foreground">Admin portal</span>
               <span className="mt-0.5 block text-xs text-muted-foreground">
-                Manage clients, waitlist requests, and platform settings.
+                Manage clients, trials, and platform settings.
               </span>
             </span>
           </button>

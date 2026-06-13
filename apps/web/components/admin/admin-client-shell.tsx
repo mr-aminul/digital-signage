@@ -6,7 +6,9 @@ import { ArrowLeft, HardDrive, Image, LayoutGrid, ListVideo, Monitor, ScrollText
 import type { AdminUserDirectoryEntry } from "@signage/types";
 import { useAdminClientRoutes } from "@/components/admin/admin-client-route-context";
 import { AdminAccountActions } from "@/components/admin/admin-account-actions";
+import { AdminTrialActions } from "@/components/admin/admin-trial-actions";
 import { formatStorageBytes } from "@/lib/plan-quota";
+import { formatTrialRemaining } from "@/lib/trial";
 import { cn } from "@/lib/utils";
 
 function AccountStatusBadge({ isDisabled }: { isDisabled: boolean }) {
@@ -70,6 +72,13 @@ export function AdminClientShell({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <AccountStatusBadge isDisabled={client.is_disabled} />
+            {client.trial_ends_at ? (
+              <span className="inline-flex items-center rounded-md bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-900">
+                {client.trial_expired
+                  ? "Trial expired"
+                  : (formatTrialRemaining(client.trial_ends_at) ?? "Trial")}
+              </span>
+            ) : null}
             <span className="inline-flex items-center gap-1 rounded-md bg-muted/60 px-2.5 py-1 text-xs tabular-nums text-muted-foreground">
               <Monitor className="h-3.5 w-3.5" aria-hidden />
               {client.is_disabled
@@ -159,6 +168,9 @@ export function AdminClientOverview({
             </dd>
           </div>
         </dl>
+        <div className="mt-4">
+          <AdminTrialActions client={client} />
+        </div>
       </div>
 
       {children}

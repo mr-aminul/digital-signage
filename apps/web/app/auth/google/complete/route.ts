@@ -2,7 +2,6 @@ import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@/auth";
 import {
   bridgeGoogleUserToSupabase,
-  GoogleBridgeError,
 } from "@/lib/auth/google-supabase-bridge";
 import { establishSupabaseSessionOnResponse } from "@/lib/auth/supabase-session-from-email";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -43,12 +42,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Google Supabase bridge failed", error);
     const loginUrl = new URL("/login", request.url);
-    if (error instanceof GoogleBridgeError) {
-      loginUrl.searchParams.set("apply", "1");
-      loginUrl.searchParams.set("email", email);
-    } else {
-      loginUrl.searchParams.set("error", "google_bridge_failed");
-    }
+    loginUrl.searchParams.set("error", "google_bridge_failed");
     return NextResponse.redirect(loginUrl);
   }
 }

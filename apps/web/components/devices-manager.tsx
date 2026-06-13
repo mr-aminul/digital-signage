@@ -134,8 +134,10 @@ export function DevicesManager() {
       if (error) {
         if (error.message.includes("device_limit_reached")) {
           toast.error(
-            `You've reached your screen limit (${deviceLimit ?? "plan limit"}). Remove a screen or ask your administrator to increase your plan.`,
+            `You've reached your screen limit (${deviceLimit ?? "plan limit"}). Remove a screen or upgrade your plan.`,
           );
+        } else if (error.message.includes("trial_expired")) {
+          toast.error("Your trial has ended. Contact us to upgrade and link more screens.");
         } else {
           toast.error(error.message);
         }

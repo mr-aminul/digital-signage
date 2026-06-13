@@ -1,28 +1,14 @@
-import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { StaffPortalChoiceGate } from "@/components/auth/staff-portal-choice-gate";
 import { PlanQuotaProvider } from "@/components/console/plan-quota-context";
 import { DashboardShell } from "@/components/shell/dashboard-shell";
-import { PageContentLoading } from "@/components/shell/page-content-loading";
 import { getServerStaffAuth } from "@/lib/auth/staff";
 import { getAccountPlanSnapshot } from "@/lib/plan/get-account-plan";
 import { getServerAuthWithProfile } from "@/lib/supabase/auth";
-
-async function DashboardPlanQuota({
-  userId,
-  children,
-}: {
-  userId: string;
-  children: React.ReactNode;
-}) {
-  const { supabase } = await getServerAuthWithProfile();
-  const plan = await getAccountPlanSnapshot(supabase, userId);
-
-  return <PlanQuotaProvider quota={plan}>{children}</PlanQuotaProvider>;
-}
+import { isTrialExpired } from "@/lib/trial";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const [{ user, profile }, staff] = await Promise.all([
+  const [{ user, profile, supabase }, staff] = await Promise.all([
     getServerAuthWithProfile(),
     getServerStaffAuth(),
   ]);
@@ -35,6 +21,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
     redirect("/account-suspended");
   }
 
+  if (isTrialExpired(profile?.trial_ends_at)) {
+    redirect("/trial-expired");
+  }
+
+  const plan = await getAccountPlanSnapshot(supabase, user.id);
+
   const displayName =
     profile?.client_name?.trim() ||
     (user.user_metadata as Record<string, string | undefined> | undefined)?.full_name?.trim() ||
@@ -44,9 +36,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <StaffPortalChoiceGate isStaff={!!staff}>
       <DashboardShell authUserId={user.id} userEmail={user.email ?? ""} displayName={displayName} isStaff={!!staff}>
-        <Suspense fallback={<PageContentLoading label="Loading account data…" />}>
-          <DashboardPlanQuota userId={user.id}>{children}</DashboardPlanQuota>
-        </Suspense>
+        <PlanQuotaProvider quota={plan}>{children}</PlanQuotaProvider>
       </DashboardShell>
     </StaffPortalChoiceGate>
   );

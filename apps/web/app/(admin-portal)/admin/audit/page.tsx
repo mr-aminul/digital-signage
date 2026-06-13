@@ -84,7 +84,7 @@ export default async function AdminAuditPage({
             ? clientLabel
               ? `Activity for ${clientLabel}.`
               : "Activity for this client account."
-            : "Platform staff actions — plan updates, suspensions, invitations, and waitlist reviews."}
+            : "Platform staff actions — plan updates, suspensions, invitations, and trial changes."}
         </p>
       </div>
 

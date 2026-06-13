@@ -66,10 +66,12 @@ export function GoogleSignInButton({
   nextPath = "/dashboard",
   showDivider = true,
   disabled = false,
+  label = "Continue with Google",
 }: {
   nextPath?: string;
   showDivider?: boolean;
   disabled?: boolean;
+  label?: string;
 }) {
   const [loading, setLoading] = useState(false);
 
@@ -99,7 +101,7 @@ export function GoogleSignInButton({
         }}
       >
         <GoogleIcon />
-        {loading ? "Redirecting…" : "Continue with Google"}
+        {loading ? "Redirecting…" : label}
       </button>
       {showDivider && (
         <div style={styles.divider} aria-hidden="true">

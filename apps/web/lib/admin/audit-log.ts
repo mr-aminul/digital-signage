@@ -5,8 +5,9 @@ export const AUDIT_ACTION_FILTERS = [
   { id: "plan_update", label: "Plan updates" },
   { id: "account_disable", label: "Suspensions" },
   { id: "account_enable", label: "Re-enables" },
-  { id: "waitlist_status", label: "Waitlist" },
   { id: "client_invite", label: "Invitations" },
+  { id: "trial_extend", label: "Trial extensions" },
+  { id: "trial_convert", label: "Trial conversions" },
 ] as const;
 
 export type AuditActionFilter = (typeof AUDIT_ACTION_FILTERS)[number]["id"];
@@ -23,7 +24,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   account_disable: "Account disabled",
   account_enable: "Account enabled",
   client_invite: "Client invited",
-  waitlist_status: "Waitlist updated",
+  trial_extend: "Trial extended",
+  trial_convert: "Trial converted",
   "staff.remove": "Admin removed",
 };
 
@@ -103,6 +105,23 @@ export function formatAuditMetadata(action: string, metadata: Record<string, unk
     if (email && clientName) return `Invitation sent to ${email} (${clientName})`;
     if (email) return `Invitation sent to ${email}`;
     return "Client invitation sent";
+  }
+
+  if (action === "trial_extend") {
+    const days = metadata.days_added;
+    const after = metadata.trial_ends_at_after;
+    const parts: string[] = [];
+    if (typeof days === "number") parts.push(`+${days} day${days === 1 ? "" : "s"}`);
+    if (typeof after === "string") {
+      parts.push(
+        `ends ${new Date(after).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`,
+      );
+    }
+    return parts.length > 0 ? parts.join(" · ") : "Trial extended";
+  }
+
+  if (action === "trial_convert") {
+    return "Trial removed · account converted to paid";
   }
 
   if (action === "waitlist_status") {

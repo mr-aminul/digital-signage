@@ -47,8 +47,19 @@ export function NavigationProgressProvider({ children }: { children: ReactNode }
   );
 
   useEffect(() => {
-    setPendingPath(null);
-  }, [pathname]);
+    if (!pendingPath) return;
+    const target = pendingPath.split("?")[0] ?? pendingPath;
+    if (pathname !== target) return;
+
+    const timeout = window.setTimeout(() => setPendingPath(null), 80);
+    return () => window.clearTimeout(timeout);
+  }, [pathname, pendingPath]);
+
+  useEffect(() => {
+    if (!pendingPath) return;
+    const timeout = window.setTimeout(() => setPendingPath(null), 12000);
+    return () => window.clearTimeout(timeout);
+  }, [pendingPath]);
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {

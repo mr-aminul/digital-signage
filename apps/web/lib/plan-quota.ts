@@ -1,5 +1,7 @@
 /** Shared plan quota constants and formatting. */
 
+export const DEFAULT_DEVICE_LIMIT = 1;
+export const DEFAULT_TRIAL_DAYS = 7;
 export const DEFAULT_STORAGE_LIMIT_BYTES = 2 * 1024 ** 3;
 export const MIN_STORAGE_LIMIT_BYTES = 1024 ** 2;
 export const MAX_UPLOAD_FILE_BYTES = 500 * 1024 ** 2;
@@ -50,6 +52,10 @@ export interface PlanQuotaSnapshot {
   storageLimitBytes: number;
   storageUsedBytes: number;
   accountDisabled?: boolean;
+  trialEndsAt?: string | null;
+  trialExpired?: boolean;
+  planKind?: string | null;
+  isOnTrial?: boolean;
 }
 
 export function isStorageFull(snapshot: Pick<PlanQuotaSnapshot, "storageLimitBytes" | "storageUsedBytes">): boolean {

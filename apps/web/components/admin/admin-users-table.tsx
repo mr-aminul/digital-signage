@@ -12,6 +12,7 @@ import { useAppRouter } from "@/hooks/use-app-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { formatTrialRemaining } from "@/lib/trial";
 
 type StatusFilter = "all" | "active" | "disabled";
 
@@ -31,9 +32,13 @@ async function setAccountDisabled(userId: string, disabled: boolean) {
 function AccountStatusBadge({
   isDisabled,
   invitationPending,
+  trialEndsAt,
+  trialExpired,
 }: {
   isDisabled: boolean;
   invitationPending?: boolean;
+  trialEndsAt?: string | null;
+  trialExpired?: boolean;
 }) {
   if (invitationPending) {
     return (
@@ -43,16 +48,38 @@ function AccountStatusBadge({
     );
   }
 
+  if (isDisabled) {
+    return (
+      <span className="inline-flex rounded-full bg-red-500/10 px-2.5 py-0.5 text-xs font-semibold text-red-700 dark:text-red-300">
+        Disabled
+      </span>
+    );
+  }
+
+  if (trialExpired) {
+    return (
+      <span className="inline-flex rounded-full bg-red-500/10 px-2.5 py-0.5 text-xs font-semibold text-red-700 dark:text-red-300">
+        Trial expired
+      </span>
+    );
+  }
+
+  if (trialEndsAt) {
+    return (
+      <span className="inline-flex rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:text-amber-200">
+        {formatTrialRemaining(trialEndsAt) ?? "Trial"}
+      </span>
+    );
+  }
+
   return (
     <span
       className={cn(
         "inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold",
-        isDisabled
-          ? "bg-red-500/10 text-red-700 dark:text-red-300"
-          : "bg-emerald-500/10 text-emerald-800 dark:text-emerald-200",
+        "bg-emerald-500/10 text-emerald-800 dark:text-emerald-200",
       )}
     >
-      {isDisabled ? "Disabled" : "Active"}
+      Active
     </span>
   );
 }
@@ -344,6 +371,8 @@ export function AdminUsersTable({
                       <AccountStatusBadge
                         isDisabled={row.is_disabled}
                         invitationPending={row.invitation_pending}
+                        trialEndsAt={row.trial_ends_at}
+                        trialExpired={row.trial_expired}
                       />
                     </td>
                     <td className="px-4 py-3">

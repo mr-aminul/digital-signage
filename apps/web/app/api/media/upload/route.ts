@@ -5,6 +5,7 @@ import { inferMediaFileType, isAcceptedSignageMime, readVideoFileDurationSeconds
 import { deleteMediaObject, putMediaObject } from "@/lib/object-storage/server";
 import { getRouteHandlerStaffAuth } from "@/lib/auth/route-handler-staff";
 import { resolveDataOwnerId } from "@/lib/auth/resolve-data-owner";
+import { isTrialExpired } from "@/lib/trial";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { durationSecondsForStorage } from "@/lib/video-duration-probe";
 
@@ -20,6 +21,12 @@ export async function POST(request: NextRequest) {
   }
   if (ctx.profile?.is_disabled && !ctx.staff) {
     return NextResponse.json({ error: "Account suspended" }, { status: 403 });
+  }
+  if (isTrialExpired(ctx.profile?.trial_ends_at) && !ctx.staff) {
+    return NextResponse.json(
+      { error: "Your trial has ended. Contact us to upgrade and continue uploading." },
+      { status: 403 },
+    );
   }
 
   const rate = checkRateLimit(`media-upload:${ctx.user.id}`, UPLOAD_RATE_LIMIT, UPLOAD_RATE_WINDOW_MS);

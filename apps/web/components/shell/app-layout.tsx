@@ -3,7 +3,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { useRouteNavigationPending } from "@/hooks/use-route-navigation-pending";
-import { NavigationProgressBar } from "@/components/shell/page-loading-skeleton";
 import { TopBar, type ProfilePortalSwitch } from "./top-bar";
 import { useBreakpoint } from "./use-breakpoint";
 import type { AppLayoutConfig, NavItem } from "./types";
@@ -94,7 +93,6 @@ export function AppLayout({
             overflow: "hidden",
           }}
         >
-          {pendingPath ? <NavigationProgressBar /> : null}
           {children}
         </div>
       </div>
@@ -129,6 +127,7 @@ export function AppLayout({
             gap: isMobile ? 0 : "0.5rem",
           }}
         >
+          {banner}
           <TopBar
             title={title}
             titleIcon={titleIcon}
@@ -163,8 +162,6 @@ export function AppLayout({
               position: "relative",
             }}
           >
-            {pendingPath ? <NavigationProgressBar /> : null}
-            {banner}
             <main
               style={{
                 flex: 1,

@@ -18,6 +18,9 @@ export interface Profile {
   storage_limit_bytes?: number;
   /** Running total of media.size_bytes; maintained by DB trigger. */
   storage_used_bytes?: number;
+  /** Null = no trial clock (legacy, paid, admin-invited). */
+  trial_ends_at?: string | null;
+  plan_kind?: "trial" | "standard" | "custom";
 }
 
 /** Row returned by admin_directory_stats() RPC. */
@@ -26,7 +29,8 @@ export interface AdminDirectoryStats {
   device_count: number;
   online_device_count: number;
   disabled_count: number;
-  pending_waitlist_count?: number;
+  active_trial_count?: number;
+  expired_trial_count?: number;
 }
 
 export interface PlatformStaff {
@@ -67,6 +71,9 @@ export interface AdminUserDirectoryEntry {
   total_count?: number;
   /** True when the account was invited but has not completed first sign-in. */
   invitation_pending?: boolean;
+  trial_ends_at?: string | null;
+  plan_kind?: string | null;
+  trial_expired?: boolean;
 }
 
 /** Row returned by admin_list_waitlist() RPC. */

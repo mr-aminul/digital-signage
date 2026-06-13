@@ -11,6 +11,8 @@ type ProfileRow = {
   device_limit?: number;
   storage_limit_bytes?: number;
   storage_used_bytes?: number;
+  trial_ends_at?: string | null;
+  plan_kind?: string | null;
 };
 
 function profileName(row: ProfileRow): string | null {
@@ -26,12 +28,15 @@ function toProfile(row: ProfileRow): Profile {
     device_limit: row.device_limit ?? 1,
     storage_limit_bytes: row.storage_limit_bytes ?? DEFAULT_STORAGE_LIMIT_BYTES,
     storage_used_bytes: row.storage_used_bytes ?? 0,
+    trial_ends_at: row.trial_ends_at ?? null,
+    plan_kind: (row.plan_kind as Profile["plan_kind"]) ?? "standard",
   };
 }
 
 const PROFILE_SELECT_FULL =
-  "id, client_name, created_at, is_disabled, device_limit, storage_limit_bytes, storage_used_bytes";
-const PROFILE_SELECT_CORE = "id, client_name, created_at, is_disabled, device_limit";
+  "id, client_name, created_at, is_disabled, device_limit, storage_limit_bytes, storage_used_bytes, trial_ends_at, plan_kind";
+const PROFILE_SELECT_CORE =
+  "id, client_name, created_at, is_disabled, device_limit, trial_ends_at, plan_kind";
 const PROFILE_SELECT_MINIMAL = "id, client_name, created_at, is_disabled";
 const PROFILE_SELECT_LEGACY_FULL =
   "id, full_name, created_at, is_disabled, device_limit, storage_limit_bytes";

@@ -14,7 +14,6 @@ export interface InviteClientPrefill {
   email?: string;
   clientName?: string;
   deviceLimit?: number;
-  waitlistId?: string;
 }
 
 interface AdminInviteClientPanelProps {
@@ -79,15 +78,6 @@ export function AdminInviteClientPanel({
       }
 
       toast.success(body?.message ?? `Invitation sent to ${trimmedEmail}`);
-
-      if (prefill?.waitlistId) {
-        await fetch("/api/admin/waitlist", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({ id: prefill.waitlistId, status: "invited" }),
-        }).catch(() => undefined);
-      }
 
       onOpenChange(false);
       setEmail("");

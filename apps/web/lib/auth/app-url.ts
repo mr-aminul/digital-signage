@@ -26,6 +26,11 @@ export function getGoogleAuthCallbackUrl(nextPath = "/dashboard"): string {
   return `${getAppUrl()}/auth/google/complete?next=${next}`;
 }
 
+/** Self-serve signup confirmation lands on the dashboard. */
+export function getSignupConfirmRedirectUrl(): string {
+  return getOAuthConfirmRedirectUrl("/dashboard");
+}
+
 /** Admin invite emails land on /auth/confirm then /auth/accept-invite to set a password. */
 export function getInviteAcceptRedirectUrl(): string {
   return getOAuthConfirmRedirectUrl("/auth/accept-invite");

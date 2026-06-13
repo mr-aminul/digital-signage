@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { deleteMediaObject } from "@/lib/object-storage/server";
 import { getRouteHandlerStaffAuth } from "@/lib/auth/route-handler-staff";
 import { resolveDataOwnerId } from "@/lib/auth/resolve-data-owner";
+import { isTrialExpired } from "@/lib/trial";
 
 export const runtime = "nodejs";
 
@@ -12,6 +13,9 @@ export async function DELETE(request: NextRequest) {
   }
   if (ctx.profile?.is_disabled && !ctx.staff) {
     return NextResponse.json({ error: "Account suspended" }, { status: 403 });
+  }
+  if (isTrialExpired(ctx.profile?.trial_ends_at) && !ctx.staff) {
+    return NextResponse.json({ error: "Your trial has ended." }, { status: 403 });
   }
 
   let body: { id?: string; storagePath?: string; ownerId?: string };

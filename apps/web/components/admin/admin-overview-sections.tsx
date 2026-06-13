@@ -1,13 +1,12 @@
 "use client";
 
-import type { AccessWaitlistEntry, AdminUserDirectoryEntry } from "@signage/types";
+import type { AdminUserDirectoryEntry } from "@signage/types";
 import { useState } from "react";
 import {
   AdminInviteClientPanel,
   type InviteClientPrefill,
 } from "@/components/admin/admin-invite-client-panel";
 import { AdminUsersTable } from "@/components/admin/admin-users-table";
-import { AdminWaitlistPanel } from "@/components/admin/admin-waitlist-panel";
 
 interface AdminOverviewSectionsProps {
   users: AdminUserDirectoryEntry[];
@@ -16,8 +15,6 @@ interface AdminOverviewSectionsProps {
   totalCount: number;
   initialQuery: string;
   initialStatus: "all" | "active" | "disabled";
-  waitlistEntries: AccessWaitlistEntry[];
-  pendingWaitlistCount: number;
 }
 
 export function AdminOverviewSections({
@@ -27,16 +24,9 @@ export function AdminOverviewSections({
   totalCount,
   initialQuery,
   initialStatus,
-  waitlistEntries,
-  pendingWaitlistCount,
 }: AdminOverviewSectionsProps) {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [invitePrefill, setInvitePrefill] = useState<InviteClientPrefill | null>(null);
-
-  function openInvite(prefill?: InviteClientPrefill) {
-    setInvitePrefill(prefill ?? null);
-    setInviteOpen(true);
-  }
 
   return (
     <div className="space-y-8">
@@ -45,7 +35,10 @@ export function AdminOverviewSections({
           <h2 className="text-sm font-semibold tracking-tight text-foreground">Client accounts</h2>
           <AdminInviteClientPanel
             open={inviteOpen}
-            onOpenChange={setInviteOpen}
+            onOpenChange={(open) => {
+              setInviteOpen(open);
+              if (!open) setInvitePrefill(null);
+            }}
             prefill={invitePrefill}
           />
         </div>
@@ -58,12 +51,6 @@ export function AdminOverviewSections({
           initialStatus={initialStatus}
         />
       </section>
-
-      <AdminWaitlistPanel
-        entries={waitlistEntries}
-        pendingCount={pendingWaitlistCount}
-        onInvite={(prefill) => openInvite(prefill)}
-      />
     </div>
   );
 }

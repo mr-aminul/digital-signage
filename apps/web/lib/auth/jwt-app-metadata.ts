@@ -2,7 +2,7 @@
 
 export function jwtAppMetadataFlag(
   appMetadata: unknown,
-  key: "is_disabled" | "is_platform_staff",
+  key: "is_disabled" | "is_platform_staff" | "trial_expired",
 ): boolean | undefined {
   if (!appMetadata || typeof appMetadata !== "object") return undefined;
   const value = (appMetadata as Record<string, unknown>)[key];
