@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useAppRouter } from "@/hooks/use-app-router";
 import { toast } from "sonner";
 import { ClientConsoleSyncProvider } from "@/components/console/client-console-sync-provider";
 import { ConsoleSyncButton } from "@/components/console/console-sync-button";
@@ -21,7 +21,7 @@ function DashboardShellInner({
   userEmail: string;
   displayName: string;
 }) {
-  const router = useRouter();
+  const router = useAppRouter();
   const prefetchPaths = useMemo(
     () => [
       ...layoutConfig.navItems.map((item) => item.path),

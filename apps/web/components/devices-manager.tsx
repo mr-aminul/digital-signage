@@ -111,7 +111,9 @@ export function DevicesManager() {
       });
       if (error) {
         if (error.message.includes("device_limit_reached")) {
-          toast.error(`Screen limit reached (${deviceLimit ?? "your plan limit"}). Contact support to add more.`);
+          toast.error(
+            `You've reached your screen limit (${deviceLimit ?? "plan limit"}). Remove a screen or ask your administrator to increase your plan.`,
+          );
         } else {
           toast.error(error.message);
         }

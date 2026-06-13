@@ -16,6 +16,16 @@ export interface Profile {
   device_limit?: number;
   /** Max cloud storage bytes; default 2 GiB. */
   storage_limit_bytes?: number;
+  /** Running total of media.size_bytes; maintained by DB trigger. */
+  storage_used_bytes?: number;
+}
+
+/** Row returned by admin_directory_stats() RPC. */
+export interface AdminDirectoryStats {
+  client_count: number;
+  device_count: number;
+  online_device_count: number;
+  disabled_count: number;
 }
 
 export interface PlatformStaff {
@@ -52,6 +62,24 @@ export interface AdminUserDirectoryEntry {
   is_disabled: boolean;
   /** True when the account also has admin portal access. */
   is_staff: boolean;
+  /** Total rows matching the current admin list filter (paginated RPC only). */
+  total_count?: number;
+}
+
+/** Row returned by admin_list_audit_log() RPC. */
+export interface AdminAuditLogEntry {
+  id: string;
+  action: string;
+  actor_id: string;
+  actor_email: string;
+  actor_display_name: string | null;
+  target_user_id: string | null;
+  target_email: string | null;
+  target_client_name: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  /** Total rows matching the current filter (paginated RPC only). */
+  total_count?: number;
 }
 
 /** TV-reported diagnostics (varies by app version); see Android `DeviceTelemetryCollector`. */

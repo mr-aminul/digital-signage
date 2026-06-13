@@ -2,12 +2,16 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { Media } from "@signage/types";
 import { MAX_UPLOAD_FILE_BYTES } from "@/lib/plan-quota";
 import { inferMediaFileType, isAcceptedSignageMime, readVideoFileDurationSeconds } from "@/lib/media";
-import { putMediaObject } from "@/lib/object-storage/server";
+import { deleteMediaObject, putMediaObject } from "@/lib/object-storage/server";
 import { getRouteHandlerStaffAuth } from "@/lib/auth/route-handler-staff";
 import { resolveDataOwnerId } from "@/lib/auth/resolve-data-owner";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { durationSecondsForStorage } from "@/lib/video-duration-probe";
 
 export const runtime = "nodejs";
+
+const UPLOAD_RATE_LIMIT = 30;
+const UPLOAD_RATE_WINDOW_MS = 60_000;
 
 export async function POST(request: NextRequest) {
   const ctx = await getRouteHandlerStaffAuth();
@@ -16,6 +20,14 @@ export async function POST(request: NextRequest) {
   }
   if (ctx.profile?.is_disabled && !ctx.staff) {
     return NextResponse.json({ error: "Account suspended" }, { status: 403 });
+  }
+
+  const rate = checkRateLimit(`media-upload:${ctx.user.id}`, UPLOAD_RATE_LIMIT, UPLOAD_RATE_WINDOW_MS);
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { error: "Too many uploads. Please wait a moment and try again." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(rate.retryAfterMs / 1000)) } },
+    );
   }
 
   let formData: FormData;
@@ -61,7 +73,7 @@ export async function POST(request: NextRequest) {
   });
   if (quotaError) {
     const message = quotaError.message.includes("storage_limit_reached")
-      ? "Storage full. Delete unused files or contact support to upgrade."
+      ? "Storage is full. Remove files from your library or ask your administrator to increase your plan."
       : quotaError.message;
     return NextResponse.json({ error: message }, { status: 403 });
   }
@@ -95,6 +107,11 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (insertError) {
+    try {
+      await deleteMediaObject(effectiveOwnerId, storagePath);
+    } catch (cleanupErr) {
+      console.error("[media/upload] orphan cleanup failed", storagePath, cleanupErr);
+    }
     return NextResponse.json({ error: insertError.message }, { status: 500 });
   }
 

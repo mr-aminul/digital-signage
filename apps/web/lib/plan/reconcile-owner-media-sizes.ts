@@ -3,19 +3,35 @@ import { getObjectStorageServerConfig } from "@/lib/object-storage/env";
 import { headMediaObjectSize } from "@/lib/object-storage/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
-async function sumOwnerStorageUsed(supabase: SupabaseClient, ownerId: string): Promise<number> {
+/** Read denormalized storage counter from profiles (falls back to RPC sum). */
+export async function getOwnerStorageUsedBytes(
+  ownerId: string,
+  supabase: SupabaseClient,
+): Promise<number> {
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("storage_used_bytes")
+    .eq("id", ownerId)
+    .maybeSingle();
+
+  if (!profileError && profile && typeof profile.storage_used_bytes === "number") {
+    return profile.storage_used_bytes;
+  }
+
+  if (profileError) {
+    console.warn("[getOwnerStorageUsedBytes] profile", profileError.message);
+  }
+
   const { data: used, error } = await supabase.rpc("get_owner_storage_used", { p_owner_id: ownerId });
   if (error) {
-    const { data: mediaRows } = await supabase.from("media").select("size_bytes").eq("owner_id", ownerId);
-    return (mediaRows ?? []).reduce(
-      (sum, row) => sum + (typeof row.size_bytes === "number" ? row.size_bytes : 0),
-      0,
-    );
+    console.warn("[getOwnerStorageUsedBytes] rpc", error.message);
+    return 0;
   }
+
   return typeof used === "number" ? used : Number(used ?? 0);
 }
 
-/** HEAD missing sizes from object storage and persist them on media rows. */
+/** One-time / admin repair: HEAD missing sizes from object storage and persist on media rows. */
 export async function reconcileOwnerMediaSizes(ownerId: string): Promise<number> {
   if (!getObjectStorageServerConfig()) {
     throw new Error("Object storage is not configured");
@@ -44,45 +60,19 @@ export async function reconcileOwnerMediaSizes(ownerId: string): Promise<number>
     }
   }
 
-  return sumOwnerStorageUsed(supabase, ownerId);
-}
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("storage_used_bytes")
+    .eq("id", ownerId)
+    .maybeSingle();
 
-/**
- * Returns tracked storage usage for an owner. When DB rows lack size_bytes, fills them
- * from the configured S3/MinIO bucket before summing.
- */
-export async function getOwnerStorageUsedBytes(
-  ownerId: string,
-  fallbackSupabase?: SupabaseClient,
-): Promise<number> {
-  let admin: SupabaseClient | null = null;
-  try {
-    admin = getSupabaseAdminClient();
-  } catch {
-    admin = null;
+  if (!profileError && profile && typeof profile.storage_used_bytes === "number") {
+    return profile.storage_used_bytes;
   }
 
-  const readClient = admin ?? fallbackSupabase;
-  if (!readClient) return 0;
-
-  const { count, error: countError } = await readClient
-    .from("media")
-    .select("id", { count: "exact", head: true })
-    .eq("owner_id", ownerId)
-    .or("size_bytes.is.null,size_bytes.eq.0");
-
-  if (countError) {
-    console.warn("[getOwnerStorageUsedBytes] count", countError.message);
-    return sumOwnerStorageUsed(readClient, ownerId);
-  }
-
-  if ((count ?? 0) > 0 && getObjectStorageServerConfig() && admin) {
-    try {
-      return await reconcileOwnerMediaSizes(ownerId);
-    } catch (err) {
-      console.warn("[getOwnerStorageUsedBytes] reconcile", err instanceof Error ? err.message : err);
-    }
-  }
-
-  return sumOwnerStorageUsed(readClient, ownerId);
+  const { data: used, error: rpcError } = await supabase.rpc("get_owner_storage_used", {
+    p_owner_id: ownerId,
+  });
+  if (rpcError) throw rpcError;
+  return typeof used === "number" ? used : Number(used ?? 0);
 }

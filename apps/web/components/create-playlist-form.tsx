@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useAppRouter } from "@/hooks/use-app-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { playlistDetailPath, useAdminClientRoutes } from "@/components/admin/admin-client-route-context";
@@ -19,7 +19,7 @@ export function CreatePlaylistForm({
   ownerId: string;
   variant?: "default" | "cta" | "empty";
 }) {
-  const router = useRouter();
+  const router = useAppRouter();
   const adminRoutes = useAdminClientRoutes();
   const adminStaff = useOptionalAdminStaff();
   const readOnly = adminStaff != null && !adminStaff.canWrite;

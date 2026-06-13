@@ -1,5 +1,5 @@
 /**
- * One-time backfill: set media.size_bytes from S3/MinIO HEAD and reconcile storage limits.
+ * One-time backfill: set media.size_bytes from S3/MinIO HEAD (triggers update profiles.storage_used_bytes).
  *
  * Usage (from apps/web with env loaded):
  *   npx tsx scripts/backfill-media-size-bytes.ts
@@ -30,12 +30,11 @@ async function main() {
 
   console.log(`Reconciled media sizes for ${ownerIds.length} owner(s).`);
 
-  const { data: profiles, error: profileError } = await supabase.from("profiles").select("id");
+  const { data: profiles, error: profileError } = await supabase.from("profiles").select("id, storage_used_bytes");
   if (profileError) throw profileError;
 
   for (const profile of profiles ?? []) {
-    const { data: used } = await supabase.rpc("get_owner_storage_used", { p_owner_id: profile.id });
-    const usedBytes = typeof used === "number" ? used : Number(used ?? 0);
+    const usedBytes = profile.storage_used_bytes ?? 0;
     const limit = Math.max(2147483648, usedBytes);
 
     await supabase.from("profiles").update({ storage_limit_bytes: limit }).eq("id", profile.id);

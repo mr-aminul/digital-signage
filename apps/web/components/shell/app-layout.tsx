@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { useRouteNavigationPending } from "@/hooks/use-route-navigation-pending";
+import { NavigationProgressBar } from "@/components/shell/page-loading-skeleton";
 import { TopBar } from "./top-bar";
 import { useBreakpoint } from "./use-breakpoint";
 import type { AppLayoutConfig, NavItem } from "./types";
@@ -87,8 +88,11 @@ export function AppLayout({
             minHeight: 0,
             display: "flex",
             flexDirection: "column",
+            position: "relative",
+            overflow: "hidden",
           }}
         >
+          {pendingPath ? <NavigationProgressBar /> : null}
           {children}
         </div>
       </div>
@@ -153,8 +157,10 @@ export function AppLayout({
               overflow: "hidden",
               display: "flex",
               flexDirection: "column",
+              position: "relative",
             }}
           >
+            {pendingPath ? <NavigationProgressBar /> : null}
             {banner}
             <main
               style={{

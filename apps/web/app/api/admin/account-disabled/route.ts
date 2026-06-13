@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { parseUserId } from "@/lib/auth/resolve-data-owner";
 import { getRouteHandlerStaffAuth } from "@/lib/auth/route-handler-staff";
 import { isStaffWriter } from "@/lib/auth/staff-utils";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 
@@ -34,6 +35,18 @@ export async function POST(request: NextRequest) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  if (body.disabled) {
+    try {
+      const admin = getSupabaseAdminClient();
+      const { error: signOutError } = await admin.auth.admin.signOut(userId, "global");
+      if (signOutError) {
+        console.warn("[account-disabled] signOut", signOutError.message);
+      }
+    } catch (err) {
+      console.warn("[account-disabled] signOut unavailable", err instanceof Error ? err.message : err);
+    }
   }
 
   return NextResponse.json({ ok: true });

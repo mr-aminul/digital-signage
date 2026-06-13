@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
+import { useAppRouter } from "@/hooks/use-app-router";
 import { X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { NavRadialSpinner } from "@/components/ui/nav-radial-spinner";
@@ -339,7 +340,7 @@ interface MobileNavDrawerProps {
 
 export function MobileNavDrawer({ brand, navItems, bottomNavItem, open, onClose, pendingPath }: MobileNavDrawerProps) {
   const pathname = usePathname();
-  const router = useRouter();
+  const router = useAppRouter();
   const { name, subtitle, icon: BrandIcon, logoColor = "var(--theme)" } = brand;
 
   useEffect(() => {

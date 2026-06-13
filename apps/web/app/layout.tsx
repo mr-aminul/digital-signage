@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Toaster } from "sonner";
+import { AppProviders } from "@/app/providers";
 import { getSupabaseConnectEnv } from "@/lib/supabase/env";
 import "@fontsource-variable/google-sans/wght.css";
 import "./globals.css";
@@ -28,7 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         ) : null}
       </head>
       <body className="font-sans antialiased">
-        {children}
+        <AppProviders>{children}</AppProviders>
         <Toaster richColors position="top-right" />
       </body>
     </html>

@@ -1,24 +1,69 @@
-import type { AdminUserDirectoryEntry } from "@signage/types";
+import type { AdminDirectoryStats, AdminUserDirectoryEntry } from "@signage/types";
 import { Monitor, Users } from "lucide-react";
 import { AdminUsersTable } from "@/components/admin/admin-users-table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getServerStaffAuth } from "@/lib/auth/staff";
 
-export default async function AdminOverviewPage() {
+const PAGE_SIZE = 50;
+
+type AdminOverviewSearchParams = {
+  page?: string;
+  q?: string;
+  status?: string;
+};
+
+function parsePage(value: string | undefined): number {
+  const n = Number.parseInt(value ?? "1", 10);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+function parseStatus(value: string | undefined): "all" | "active" | "disabled" {
+  if (value === "active" || value === "disabled") return value;
+  return "all";
+}
+
+export default async function AdminOverviewPage({
+  searchParams,
+}: {
+  searchParams: AdminOverviewSearchParams;
+}) {
   const ctx = await getServerStaffAuth();
   if (!ctx) {
     throw new Error("Unauthorized");
   }
 
-  const { data, error } = await ctx.supabase.rpc("admin_list_users");
-  if (error) {
-    throw new Error(error.message);
+  const page = parsePage(searchParams.page);
+  const status = parseStatus(searchParams.status);
+  const search = searchParams.q?.trim() || null;
+  const offset = (page - 1) * PAGE_SIZE;
+
+  const [statsResult, listResult] = await Promise.all([
+    ctx.supabase.rpc("admin_directory_stats"),
+    ctx.supabase.rpc("admin_list_users", {
+      p_limit: PAGE_SIZE,
+      p_offset: offset,
+      p_search: search,
+      p_status: status,
+    }),
+  ]);
+
+  if (statsResult.error) {
+    throw new Error(statsResult.error.message);
+  }
+  if (listResult.error) {
+    throw new Error(listResult.error.message);
   }
 
-  const users = (data as AdminUserDirectoryEntry[]) ?? [];
-  const totalDevices = users.reduce((sum, row) => sum + Number(row.device_count), 0);
-  const onlineDevices = users.reduce((sum, row) => sum + Number(row.online_device_count), 0);
-  const disabledAccounts = users.filter((row) => row.is_disabled).length;
+  const statsRows = (statsResult.data as AdminDirectoryStats[]) ?? [];
+  const stats = statsRows[0] ?? {
+    client_count: 0,
+    device_count: 0,
+    online_device_count: 0,
+    disabled_count: 0,
+  };
+
+  const users = (listResult.data as AdminUserDirectoryEntry[]) ?? [];
+  const totalCount = users[0]?.total_count ?? users.length;
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 pb-4">
@@ -41,7 +86,7 @@ export default async function AdminOverviewPage() {
             <CardDescription>Registered business accounts</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-semibold tabular-nums">{users.length}</p>
+            <p className="text-3xl font-semibold tabular-nums">{stats.client_count}</p>
           </CardContent>
         </Card>
 
@@ -56,7 +101,7 @@ export default async function AdminOverviewPage() {
             <CardDescription>Linked screens across all clients</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-semibold tabular-nums">{totalDevices}</p>
+            <p className="text-3xl font-semibold tabular-nums">{stats.device_count}</p>
           </CardContent>
         </Card>
 
@@ -71,7 +116,7 @@ export default async function AdminOverviewPage() {
             <CardDescription>Screens reporting recent heartbeats</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-semibold tabular-nums">{onlineDevices}</p>
+            <p className="text-3xl font-semibold tabular-nums">{stats.online_device_count}</p>
           </CardContent>
         </Card>
 
@@ -86,14 +131,21 @@ export default async function AdminOverviewPage() {
             <CardDescription>Suspended client accounts</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-semibold tabular-nums">{disabledAccounts}</p>
+            <p className="text-3xl font-semibold tabular-nums">{stats.disabled_count}</p>
           </CardContent>
         </Card>
       </div>
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold tracking-tight text-foreground">Client accounts</h2>
-        <AdminUsersTable users={users} />
+        <AdminUsersTable
+          users={users}
+          page={page}
+          pageSize={PAGE_SIZE}
+          totalCount={totalCount}
+          initialQuery={search ?? ""}
+          initialStatus={status}
+        />
       </section>
     </div>
   );

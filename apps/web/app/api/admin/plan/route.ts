@@ -54,23 +54,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Too many active devices selected" }, { status: 400 });
   }
 
-  const { error: deviceError } = await supabase.rpc("admin_set_device_limit", {
+  const { error } = await supabase.rpc("admin_update_plan", {
     p_user_id: userId,
-    p_limit: deviceLimit,
+    p_device_limit: deviceLimit,
+    p_storage_limit_bytes: storageLimitBytes,
     p_active_device_ids: activeDeviceIds && activeDeviceIds.length > 0 ? activeDeviceIds : null,
   });
 
-  if (deviceError) {
-    return NextResponse.json({ error: deviceError.message }, { status: 500 });
-  }
-
-  const { error: storageError } = await supabase.rpc("admin_set_storage_limit", {
-    p_user_id: userId,
-    p_limit_bytes: storageLimitBytes,
-  });
-
-  if (storageError) {
-    return NextResponse.json({ error: storageError.message }, { status: 500 });
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });

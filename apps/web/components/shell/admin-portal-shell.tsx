@@ -1,14 +1,16 @@
 "use client";
 
 import { useMemo } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import { Settings, Shield, Users } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { useAppRouter } from "@/hooks/use-app-router";
+import { ScrollText, Settings, Shield, Users } from "lucide-react";
 import { toast } from "sonner";
 import type { PlatformStaff } from "@signage/types";
 import { AdminPortalSyncProvider } from "@/components/console/admin-portal-sync-provider";
 import { AdminStaffProvider } from "@/components/admin/admin-staff-context";
 import { ConsoleSyncButton } from "@/components/console/console-sync-button";
 import { AppLayout } from "@/components/shell/app-layout";
+import { DashboardRoutePrefetch } from "@/components/shell/dashboard-route-prefetch";
 import { NotificationsProvider } from "@/components/shell/notifications-context";
 import { SettingsProvider } from "@/components/shell/settings-context";
 import { clearConsoleCachePersist } from "@/stores/console-data-store";
@@ -17,6 +19,7 @@ import { getAdminPageTitle } from "@/lib/config/admin-layout";
 
 const adminNavItems: NavItem[] = [
   { path: "/admin", label: "Clients", icon: Users, end: true },
+  { path: "/admin/audit", label: "Audit log", icon: ScrollText, end: true },
   { path: "/admin/admins", label: "Admins", icon: Settings, end: true },
 ];
 
@@ -27,11 +30,15 @@ export function AdminPortalShell({
   children: React.ReactNode;
   staff: PlatformStaff;
 }) {
-  const router = useRouter();
+  const router = useAppRouter();
   const navItems = useMemo(() => {
     if (staff.role === "owner") return adminNavItems;
     return adminNavItems.filter((item) => item.path !== "/admin/admins");
   }, [staff.role]);
+  const prefetchPaths = useMemo(
+    () => navItems.map((item) => item.path),
+    [navItems],
+  );
 
   const displayName = staff.display_name?.trim() || staff.email.split("@")[0] || "Admin";
   const profileSubtext =
@@ -80,6 +87,7 @@ export function AdminPortalShell({
             outerBg="#1f2937"
             contentCardBg="#F4F7FB"
           >
+            <DashboardRoutePrefetch paths={prefetchPaths} />
             {children}
           </AppLayout>
         </AdminPortalSyncProvider>

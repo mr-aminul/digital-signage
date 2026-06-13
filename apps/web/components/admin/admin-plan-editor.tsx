@@ -208,7 +208,8 @@ export function AdminPlanEditor({
         <h2 className="text-sm font-semibold text-foreground">Plan & usage</h2>
         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
           Set how many screens can play and how much cloud storage this client receives. Lowering
-          screens below the linked count pauses playback on the rest immediately.
+          screens below the linked count pauses playback on the rest immediately. If you do not pick
+          active screens, the most recently seen devices are kept online automatically.
         </p>
       </div>
 

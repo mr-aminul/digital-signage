@@ -11,6 +11,7 @@ type AdminClientRoutes = {
   playlistsPath: string;
   playlistPath: (playlistId: string) => string;
   mediaPath: string;
+  auditPath: string;
 };
 
 const AdminClientRouteContext = createContext<AdminClientRoutes | null>(null);
@@ -33,6 +34,7 @@ export function AdminClientRouteProvider({
       playlistsPath: `${basePath}/playlists`,
       playlistPath: (playlistId: string) => `${basePath}/playlists/${playlistId}`,
       mediaPath: `${basePath}/media`,
+      auditPath: `${basePath}/audit`,
     };
   }, [clientId]);
 

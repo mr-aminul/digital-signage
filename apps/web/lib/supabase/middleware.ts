@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { jwtAppMetadataFlag } from "@/lib/auth/jwt-app-metadata";
 import { getSupabaseConnectEnv } from "./env";
 
 const PROTECTED_PREFIXES = ["/devices", "/playlists", "/media", "/dashboard", "/profile", "/settings", "/admin"];
@@ -65,10 +66,12 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   });
 
   let userId: string | undefined;
+  let appMetadata: unknown;
   try {
     const { data, error } = await supabase.auth.getClaims();
     if (!error) {
       userId = data?.claims?.sub;
+      appMetadata = data?.claims?.app_metadata;
     }
   } catch {
     // Auth unreachable — fail closed on protected routes only.
@@ -84,25 +87,37 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/");
 
     if (isAdminRoute) {
-      const { data: staffRow } = await supabase
-        .from("platform_staff")
-        .select("user_id")
-        .eq("user_id", userId)
-        .eq("is_active", true)
-        .maybeSingle();
+      const jwtStaff = jwtAppMetadataFlag(appMetadata, "is_platform_staff");
+      if (jwtStaff === true) {
+        // JWT flag set by sync_user_app_metadata — skip DB round-trip.
+      } else {
+        const { data: staffRow } = await supabase
+          .from("platform_staff")
+          .select("user_id")
+          .eq("user_id", userId)
+          .eq("is_active", true)
+          .maybeSingle();
 
-      if (!staffRow) {
-        return NextResponse.redirect(new URL("/dashboard", request.url));
+        if (!staffRow) {
+          return NextResponse.redirect(new URL("/dashboard", request.url));
+        }
       }
     } else if (isProtectedPath(pathname) && pathname !== "/account-suspended") {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("is_disabled")
-        .eq("id", userId)
-        .maybeSingle();
-
-      if (profile?.is_disabled) {
+      const jwtDisabled = jwtAppMetadataFlag(appMetadata, "is_disabled");
+      if (jwtDisabled === true) {
         return NextResponse.redirect(new URL("/account-suspended", request.url));
+      }
+
+      if (jwtDisabled === undefined) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("is_disabled")
+          .eq("id", userId)
+          .maybeSingle();
+
+        if (profile?.is_disabled) {
+          return NextResponse.redirect(new URL("/account-suspended", request.url));
+        }
       }
     }
   }

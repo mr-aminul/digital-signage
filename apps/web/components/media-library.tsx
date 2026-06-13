@@ -139,7 +139,7 @@ export function MediaLibrary({ userId }: MediaLibraryProps) {
           <>
             {storageFull ? (
               <div className="rounded-lg border border-red-500/30 bg-red-500/8 px-3 py-2.5 text-xs leading-relaxed text-red-900 dark:text-red-100">
-                Storage full. Delete unused files or contact support to add more space.
+                Storage is full. Delete files from your library or ask your administrator to increase your plan.
               </div>
             ) : (
               <Button

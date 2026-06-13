@@ -42,18 +42,12 @@ export const getServerAuthWithProfile = cache(
     user: User | null;
     profile: Profile | null;
   }> => {
-    const supabase = getSupabaseServerClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
+    const { supabase, user } = await getServerAuth();
+    if (!user) {
       return { supabase, user: null, profile: null };
     }
 
     const profile = await fetchProfileRow(supabase, user.id);
-
     return { supabase, user, profile };
   },
 );

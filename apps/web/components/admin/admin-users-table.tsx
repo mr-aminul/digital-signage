@@ -1,13 +1,14 @@
 "use client";
 
 import type { AdminUserDirectoryEntry } from "@signage/types";
-import { Search, X } from "lucide-react";
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import { useCallback, useEffect, useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { ViewClientButton } from "@/components/admin/view-client-button";
 import { PlanUsageMeter } from "@/components/plan/plan-usage-meter";
 import { useAdminStaff } from "@/components/admin/admin-staff-context";
+import { useAppRouter } from "@/hooks/use-app-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -51,7 +52,7 @@ function AccountDisableToggle({
   isDisabled: boolean;
   email: string;
 }) {
-  const router = useRouter();
+  const router = useAppRouter();
   const [loading, setLoading] = useState(false);
 
   const nextDisabled = !isDisabled;
@@ -67,7 +68,7 @@ function AccountDisableToggle({
       onClick={() => {
         const message = nextDisabled
           ? `Disable ${email}? All of their screens will pause immediately.`
-          : `Re-enable ${email}? All of their screens will resume playback.`;
+          : `Re-enable ${email}? Quota-active screens will resume; over-limit screens stay paused.`;
         if (!window.confirm(message)) return;
 
         setLoading(true);
@@ -97,38 +98,86 @@ function formatDate(value: string) {
   });
 }
 
-function filterUsers(users: AdminUserDirectoryEntry[], query: string, status: StatusFilter) {
-  let rows = users;
-  if (status === "active") rows = rows.filter((user) => !user.is_disabled);
-  if (status === "disabled") rows = rows.filter((user) => user.is_disabled);
-
-  const trimmed = query.trim().toLowerCase();
-  if (!trimmed) return rows;
-
-  return rows.filter((user) => {
-    const name = user.client_name?.toLowerCase() ?? "";
-    return user.email.toLowerCase().includes(trimmed) || name.includes(trimmed);
-  });
-}
-
 const STATUS_FILTERS: { id: StatusFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "active", label: "Active" },
   { id: "disabled", label: "Disabled" },
 ];
 
-export function AdminUsersTable({ users }: { users: AdminUserDirectoryEntry[] }) {
-  const { canWrite } = useAdminStaff();
-  const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+function buildAdminListUrl({
+  page,
+  query,
+  status,
+}: {
+  page: number;
+  query: string;
+  status: StatusFilter;
+}): string {
+  const params = new URLSearchParams();
+  if (page > 1) params.set("page", String(page));
+  const trimmed = query.trim();
+  if (trimmed) params.set("q", trimmed);
+  if (status !== "all") params.set("status", status);
+  const qs = params.toString();
+  return qs ? `/admin?${qs}` : "/admin";
+}
 
-  const filteredUsers = useMemo(
-    () => filterUsers(users, query, statusFilter),
-    [users, query, statusFilter],
+export function AdminUsersTable({
+  users,
+  page,
+  pageSize,
+  totalCount,
+  initialQuery,
+  initialStatus,
+}: {
+  users: AdminUserDirectoryEntry[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  initialQuery: string;
+  initialStatus: StatusFilter;
+}) {
+  const router = useAppRouter();
+  const searchParams = useSearchParams();
+  const { canWrite } = useAdminStaff();
+  const [query, setQuery] = useState(initialQuery);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialStatus);
+  const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    setQuery(initialQuery);
+    setStatusFilter(initialStatus);
+  }, [initialQuery, initialStatus]);
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const rangeStart = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
+  const rangeEnd = Math.min(page * pageSize, totalCount);
+
+  const navigate = useCallback(
+    (next: { page?: number; query?: string; status?: StatusFilter }) => {
+      const url = buildAdminListUrl({
+        page: next.page ?? 1,
+        query: next.query ?? query,
+        status: next.status ?? statusFilter,
+      });
+      startTransition(() => {
+        router.push(url);
+      });
+    },
+    [query, router, statusFilter],
   );
 
-  const activeCount = users.filter((user) => !user.is_disabled).length;
-  const disabledCount = users.filter((user) => user.is_disabled).length;
+  useEffect(() => {
+    const trimmed = query.trim();
+    const currentQ = searchParams.get("q") ?? "";
+    if (trimmed === currentQ) return;
+
+    const timer = window.setTimeout(() => {
+      navigate({ page: 1, query: trimmed });
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [query, navigate, searchParams]);
 
   return (
     <div className="space-y-3">
@@ -158,33 +207,33 @@ export function AdminUsersTable({ users }: { users: AdminUserDirectoryEntry[] })
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {STATUS_FILTERS.map(({ id, label }) => {
-            const count =
-              id === "all" ? users.length : id === "active" ? activeCount : disabledCount;
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setStatusFilter(id)}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition",
-                  statusFilter === id
-                    ? "border-brand-faint25 bg-brand-faint15 text-foreground"
-                    : "border-border bg-background text-muted-foreground hover:border-border/80 hover:text-foreground",
-                )}
-              >
-                {label}
-                <span className="tabular-nums text-[0.6875rem] opacity-70">{count}</span>
-              </button>
-            );
-          })}
+          {STATUS_FILTERS.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => {
+                setStatusFilter(id);
+                navigate({ page: 1, status: id });
+              }}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition",
+                statusFilter === id
+                  ? "border-brand-faint25 bg-brand-faint15 text-foreground"
+                  : "border-border bg-background text-muted-foreground hover:border-border/80 hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Showing {filteredUsers.length} of {users.length} accounts
-        {query.trim() ? ` matching “${query.trim()}”` : ""}.
-        Use <span className="font-medium text-foreground">View</span> to open a client workspace.
+        {totalCount === 0
+          ? "No accounts match your filters."
+          : `Showing ${rangeStart}–${rangeEnd} of ${totalCount} accounts`}
+        {initialQuery ? ` matching “${initialQuery}”` : ""}.
+        {isPending ? " Loading…" : ""}
       </p>
 
       <div className="overflow-hidden rounded-xl border border-border/90 bg-card shadow-sm">
@@ -203,7 +252,7 @@ export function AdminUsersTable({ users }: { users: AdminUserDirectoryEntry[] })
               </tr>
             </thead>
             <tbody>
-              {filteredUsers.length === 0 ? (
+              {users.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-4 py-12 text-center">
                     <p className="text-sm font-medium text-foreground">No accounts match your filters</p>
@@ -213,7 +262,7 @@ export function AdminUsersTable({ users }: { users: AdminUserDirectoryEntry[] })
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map((row) => (
+                users.map((row) => (
                   <tr
                     key={row.id}
                     className={cn(
@@ -274,6 +323,36 @@ export function AdminUsersTable({ users }: { users: AdminUserDirectoryEntry[] })
           </table>
         </div>
       </div>
+
+      {totalPages > 1 ? (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">
+            Page {page} of {totalPages}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={page <= 1 || isPending}
+              onClick={() => navigate({ page: page - 1 })}
+            >
+              <ChevronLeft className="h-4 w-4" aria-hidden />
+              Previous
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages || isPending}
+              onClick={() => navigate({ page: page + 1 })}
+            >
+              Next
+              <ChevronRight className="h-4 w-4" aria-hidden />
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

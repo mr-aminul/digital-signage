@@ -3,7 +3,8 @@
 import type { Playlist } from "@signage/types";
 import { FolderOpen, Home, ListVideo, Search, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
+import { useAppRouter } from "@/hooks/use-app-router";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
@@ -20,7 +21,7 @@ import { useConsoleDataStore } from "@/stores/console-data-store";
 
 export function PlaylistsWorkspace({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
+  const router = useAppRouter();
   const adminRoutes = useAdminClientRoutes();
   const adminStaff = useOptionalAdminStaff();
   const readOnly = adminStaff != null && !adminStaff.canWrite;
