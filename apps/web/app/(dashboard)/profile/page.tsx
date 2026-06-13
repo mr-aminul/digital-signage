@@ -6,7 +6,10 @@ export default async function ProfilePage() {
   if (!user) redirect("/login");
 
   const meta = user.user_metadata as Record<string, string | undefined> | undefined;
-  const clientName = profile?.client_name?.trim() || meta?.full_name?.trim();
+  const clientName =
+    profile?.client_name?.trim() ||
+    meta?.full_name?.trim() ||
+    user.email?.split("@")[0];
 
   return (
     <div style={{ maxWidth: "36rem" }}>
